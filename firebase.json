@@ -1,0 +1,45 @@
+{
+  "functions": {
+    "source": "functions",
+    "ignore": [
+      "node_modules",
+      ".git",
+      ".github",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "storage-debug.log"
+    ]
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "/api/v1/register",
+        "function": "registerUser"
+      },
+      {
+        "source": "/api/v1/login",
+        "function": "loginUser"
+      },
+      {
+        "source": "/api/v1/getuserdetails",
+        "function": "getUserDetails"
+      }
+    ]
+  },
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "auth": {
+      "port": 9099
+    },
+    "ui": {
+      "enabled": true
+    }
+  }
+}

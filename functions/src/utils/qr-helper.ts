@@ -1,0 +1,44 @@
+import * as qrcode from 'qrcode';
+import * as crypto from 'crypto';
+
+export const generateHiddenCode = (length: number = 8): string => {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
+};
+
+export const generateQRBase64 = async (data: string): Promise<string> => {
+    try {
+        const qrDataUrl = await qrcode.toDataURL(data, {
+            width: 300,
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+            }
+        });
+        return qrDataUrl;
+    } catch (error) {
+        throw new Error(`QR generation failed: ${error}`);
+    }
+};
+
+export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371000; // Earth radius in meters
+    const phi1 = lat1 * Math.PI / 180;
+    const phi2 = lat2 * Math.PI / 180;
+    const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+    const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(deltaPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+};
+
+export const generateQRId = (): string => {
+    return crypto.randomBytes(12).toString('hex');
+};

@@ -15,16 +15,32 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       {
-        "source": "/api/v1/register",
-        "function": "registerUser"
+        "source": "/api/v1/register-seller",
+        "function": "registerSeller"
       },
       {
-        "source": "/api/v1/login",
-        "function": "loginUser"
+        "source": "/api/v1/login-seller",
+        "function": "loginSeller"
       },
       {
         "source": "/api/v1/getuserdetails",
         "function": "getUserDetails"
+      },
+      {
+        "source": "/api/v1/logout-seller",
+        "function": "logoutSeller"
+      },
+      {
+        "source": "/api/v1/generate-batch",
+        "function": "generateBatchQRCodes"
+      },
+      {
+        "source": "/api/v1/scan-qr",
+        "function": "scanQRCode"
+      },
+      {
+        "source": "/api/v1/generate-qr",
+        "function": "generateQRCode"
       }
     ]
   },

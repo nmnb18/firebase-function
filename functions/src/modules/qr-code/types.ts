@@ -1,0 +1,33 @@
+export interface QRCodeGenerateRequest {
+    points_value?: number;
+    expires_in_minutes?: number;
+    batch_size?: number;
+}
+
+export interface QRCodeScanRequest {
+    qr_id: string;
+    hidden_code?: string;
+    user_lat?: number;
+    user_lng?: number;
+}
+
+export interface QRCodeResponse {
+    qr_id: string;
+    qr_code_base64: string;
+    qr_type: string;
+    expires_at?: Date | null;
+    hidden_code?: string | null;
+}
+
+export interface QRCodeBatchResponse {
+    qr_codes: QRCodeResponse[];
+    total_generated: number;
+}
+
+export interface ScanResponse {
+    message: string;
+    qr_type: string;
+    points_earned: number;
+    total_points: number;
+    seller_name: string;
+}

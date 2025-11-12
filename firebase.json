@@ -47,6 +47,10 @@
         "function": "generateQRCode"
       },
       {
+        "source": "/api/v1/qr-code/count-monthly",
+        "function": "countMonthlyQRCodes"
+      },
+      {
         "source": "/api/v1/qr-code/get-active-qr",
         "function": "getActiveQR"
       },
@@ -59,7 +63,7 @@
         "function": "createOrder"
       },
       {
-        "source": "/api/v1/dashboard/verify-payment",
+        "source": "/api/v1/payments/verify-payment",
         "function": "verifyPayment"
       }
     ]

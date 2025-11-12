@@ -1,7 +1,7 @@
 import * as functions from "firebase-functions";
 import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
-import { getMonthlyQRLimit, getSubscriptionEndDate, getSubscriptionFeatures, getSubscriptionPrice, sendWelcomeEmail } from "../../utils/helper";
+import { getMonthlyQRLimit, getSubscriptionEndDate, getSubscriptionPrice, sendWelcomeEmail } from "../../utils/helper";
 
 const corsHandler = cors({ origin: true });
 
@@ -168,7 +168,6 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                 seller_id: user.uid,
                 tier: subscriptionTier,
                 monthly_qr_limit: getMonthlyQRLimit(subscriptionTier),
-                features: getSubscriptionFeatures(subscriptionTier),
                 price: getSubscriptionPrice(subscriptionTier),
                 status: 'active',
                 current_period_start: adminRef.firestore.FieldValue.serverTimestamp(),

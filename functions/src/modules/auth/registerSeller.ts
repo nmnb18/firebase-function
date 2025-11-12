@@ -96,7 +96,6 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                 name,
                 phone,
                 role: "seller",
-                shopName,
                 createdAt: adminRef.firestore.FieldValue.serverTimestamp(),
                 updatedAt: adminRef.firestore.FieldValue.serverTimestamp(),
             };

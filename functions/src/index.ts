@@ -5,3 +5,8 @@ export { logoutSeller } from './modules/auth/logoutSeller';
 export { generateBatchQRCodes } from './modules/qr-code/generate-batch';
 export { scanQRCode } from './modules/qr-code/scan-qr';
 export { generateQRCode } from './modules/qr-code/generate-qr';
+export { sellerStats } from './modules/dashboard/seller-stats';
+export { getActiveQR } from './modules/qr-code/get-active-qr';
+export { refreshToken } from './modules/auth/refreshToken';
+export { createOrder } from './modules/payments/createOrder';
+export { verifyPayment } from './modules/payments/verifyPayment';

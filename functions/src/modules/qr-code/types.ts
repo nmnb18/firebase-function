@@ -2,6 +2,7 @@ export interface QRCodeGenerateRequest {
     points_value?: number;
     expires_in_minutes?: number;
     batch_size?: number;
+    qr_code_type?: string
 }
 
 export interface QRCodeScanRequest {

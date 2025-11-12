@@ -12,7 +12,8 @@ const getMonthlyQRLimit = (tier: string): number => {
 const getSubscriptionFeatures = (tier: string): string[] => {
     const features = {
         'free': ['basic_analytics', 'dynamic_qr', 'static_qr'],
-        'pro': ['advanced_analytics', 'unlimited_qr', 'custom_branding', 'api_access']
+        'pro': ['advanced_analytics', 'fixed_selected_unlimited_qr'],
+        'premium': ['advanced_analytics', 'unlimited_qr', 'custom_branding']
     };
     return features[tier as keyof typeof features] || ['basic_analytics'];
 };
@@ -20,8 +21,8 @@ const getSubscriptionFeatures = (tier: string): string[] => {
 const getSubscriptionPrice = (tier: string): number => {
     const prices = {
         'free': 0,
-        'pro': 999,
-        'enterprise': 4999
+        'pro': 299,
+        'premium': 2999
     };
     return prices[tier as keyof typeof prices] || 0;
 };

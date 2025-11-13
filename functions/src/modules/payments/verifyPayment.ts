@@ -3,6 +3,7 @@ import cors from "cors";
 import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
+import { generateInternalOrderId } from "../../utils/helper";
 
 const corsHandler = cors({ origin: true });
 
@@ -89,6 +90,9 @@ export const verifyPayment = functions.https.onRequest(
                     now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
                 );
 
+                // Generate internal Grabbit order ID
+                const internalOrderId = await generateInternalOrderId();
+
                 // ✅ Mark payment as successful
                 await db.collection("payments").doc(razorpay_order_id).update({
                     status: "paid",
@@ -102,10 +106,20 @@ export const verifyPayment = functions.https.onRequest(
 
                 // ✅ Update seller profile with new plan info
                 await db.collection("seller_profiles").doc(sellerId).update({
-                    subscription_tier: planId,
-                    subscription_expiry: adminRef.firestore.Timestamp.fromDate(expiryDate),
-                    monthly_qr_limit: plan.monthly_qr_limit,
-                    updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    subscription: {
+                        tier: planId,
+                        expires_at: adminRef.firestore.Timestamp.fromDate(expiryDate),
+                        qr_limit: plan.monthly_qr_limit,
+                        updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                        last_payment: {
+                            order_id: internalOrderId,
+                            razorpay_order_id,
+                            payment_id: razorpay_payment_id,
+                            amount: plan.price,
+                            environment: env,
+                            paid_at: adminRef.firestore.FieldValue.serverTimestamp()
+                        }
+                    }
                 });
 
                 // ✅ Update subscription record
@@ -120,16 +134,39 @@ export const verifyPayment = functions.https.onRequest(
                         current_period_end: adminRef.firestore.Timestamp.fromDate(
                             expiryDate
                         ),
+                        order_id: internalOrderId,
                         updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                     },
                     { merge: true }
                 );
+
+
+
+                // Create subscription history entry
+                await db
+                    .collection("subscription_history")
+                    .doc(sellerId)
+                    .collection("records")
+                    .add({
+                        internal_order_id: internalOrderId,
+                        razorpay_order_id,
+                        razorpay_payment_id,
+                        razorpay_signature,
+                        plan_id: planId,
+                        seller_id: sellerId,
+                        amount: plan.price,
+                        environment: env,
+                        status: "paid",
+                        paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                        expires_at: adminRef.firestore.Timestamp.fromDate(expiryDate),
+                    });
 
                 return res.status(200).json({
                     success: true,
                     message: "Payment verified successfully",
                     subscription: {
                         plan: planId,
+                        order_id: internalOrderId,
                         expires_at: expiryDate.toISOString(),
                         monthly_qr_limit: plan.monthly_qr_limit,
                     },

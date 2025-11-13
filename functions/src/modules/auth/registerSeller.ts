@@ -159,7 +159,7 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                     price: getSubscriptionPrice(subscriptionTier),
                     status: "active",
                     period_start: adminRef.firestore.FieldValue.serverTimestamp(),
-                    period_end: getSubscriptionEndDate(),
+                    expires_at: getSubscriptionEndDate(),
                 },
 
                 media: {

@@ -1,4 +1,4 @@
-import { adminRef } from "../config/firebase";
+import { adminRef, db } from "../config/firebase";
 
 const getMonthlyQRLimit = (tier: string): number => {
     const limits = {
@@ -38,11 +38,20 @@ const sendWelcomeEmail = async (email: string, name: string, shopName: string): 
     // This is a placeholder implementation
     console.log(`Welcome email sent to ${email} for ${shopName}`);
 };
+const generateInternalOrderId = async () => {
+    const paymentsSnap = await db.collection("payments").get();
+    const count = paymentsSnap.size + 1;
+
+    // Always 3 digits: 001, 002, 003...
+    const padded = String(count).padStart(3, "0");
+    return `GBT-${padded}`;
+}
 
 export {
     sendWelcomeEmail,
     getSubscriptionFeatures,
     getMonthlyQRLimit,
     getSubscriptionEndDate,
-    getSubscriptionPrice
+    getSubscriptionPrice,
+    generateInternalOrderId
 }

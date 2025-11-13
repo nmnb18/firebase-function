@@ -70,19 +70,7 @@ export const loginSeller = functions.https.onRequest(
                         .json({ error: `Role mismatch: expected ${role}` });
                 }
 
-                // 4️⃣ If seller, fetch their profile for plan and shop info
-                let sellerProfile = null;
-                if (role === "seller") {
-                    const profileSnap = await db
-                        .collection("seller_profiles")
-                        .where("user_id", "==", userRecord.uid)
-                        .limit(1)
-                        .get();
 
-                    if (!profileSnap.empty) {
-                        sellerProfile = profileSnap.docs[0].data();
-                    }
-                }
 
                 // 5️⃣ Merge and return all info together
                 return res.status(200).json({
@@ -90,11 +78,7 @@ export const loginSeller = functions.https.onRequest(
                     uid: data.localId,
                     idToken: data.idToken,
                     refreshToken: data.refreshToken, // ✅ include this
-                    expiresIn: data.expiresIn,
-                    user: {
-                        ...userData,
-                        ...(sellerProfile ? { seller_profile: sellerProfile } : {}),
-                    },
+                    expiresIn: data.expiresIn
                 });
             } catch (err: any) {
                 console.error("loginSeller error:", err);

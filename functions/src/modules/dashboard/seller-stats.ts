@@ -66,29 +66,32 @@ export const sellerStats = functions.https.onRequest(async (req, res) => {
                 seller_name: undefined
             };
 
-            results.seller_name = sellerData?.shop_name ?? null;
+            results.seller_name = sellerData?.business.shop_name ?? null;
 
             // 2) active_qr_codes
             const qrQ = await db.collection("qr_codes")
                 .where("seller_id", "==", sellerId)
-                .where("active", "==", true)
                 .get();
-            results.active_qr_codes = qrQ.size;
+            results.total_qrs = qrQ.size;
 
             // 3) scans: total_scanned, total_points_issued, distinct users
-            // NOTE: this uses client-side aggregation (get all matching docs) which is OK for MVP with low volume.
-            const scansQ = await db.collection("scans")
+            // Use `transactions` where transaction_type == 'earn'
+            const txQ = await db.collection("transactions")
                 .where("seller_id", "==", sellerId)
+                .where("transaction_type", "==", "earn")
                 .get();
 
-            results.total_scanned = scansQ.size;
+            results.total_scanned = txQ.size;
+
             let pointsSum = 0;
             const userSet = new Set<string>();
-            scansQ.forEach((doc) => {
+
+            txQ.forEach((doc) => {
                 const d = doc.data();
                 if (d?.points) pointsSum += Number(d.points) || 0;
                 if (d?.user_id) userSet.add(d.user_id);
             });
+
             results.total_points_issued = pointsSum;
             results.total_users = userSet.size;
 
@@ -106,6 +109,43 @@ export const sellerStats = functions.https.onRequest(async (req, res) => {
             }
             results.total_redemptions = redemptionsCount;
 
+            // 5) LAST 5 SCANS  ---------------------------------------
+            const lastFiveQ = await db.collection("transactions")
+                .where("seller_id", "==", sellerId)
+                .where("transaction_type", "==", "earn")
+                .orderBy("timestamp", "desc")
+                .limit(5)
+                .get();
+            results.last_five_scans = lastFiveQ.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
+
+
+            // 6) TODAY’S STATS ---------------------------------------
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const todayScansQ = await db.collection("scans")
+                .where("seller_id", "==", sellerId)
+                .where("transaction_type", "==", "earn")
+                .where("timestamp", ">=", today)
+                .get();
+
+            let todayPoints = 0;
+
+            todayScansQ.forEach(doc => {
+                const d = doc.data();
+                todayPoints += Number(d.points || 0);
+            });
+
+            results.today = {
+                scans: todayScansQ.size,
+                points: todayPoints,
+            };
+
+            results.subscription_tier = sellerData?.subscription.tier || "free";
+            results.locked_features = (results.subscription_tier === "free");
             return res.status(200).json({ success: true, data: results });
         } catch (error: any) {
             console.error("sellerStats error:", error);

@@ -32,6 +32,7 @@ interface RegisterSellerData {
     acceptTerms: boolean;
     latitude?: number | null;
     longitude?: number | null;
+    establishedYear?: string | null;
 }
 
 export const registerSeller = functions.https.onRequest(async (req, res) => {
@@ -40,57 +41,59 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
             return res.status(405).json({ error: "POST method required" });
         }
 
-        const {
-            email,
-            password,
-            name,
-            shopName,
-            phone,
-            businessType,
-            category,
-            description,
-            street,
-            city,
-            state,
-            pincode,
-            country = "India",
-            enableLocation = false,
-            locationRadius = 100,
-            gstNumber,
-            panNumber,
-            businessRegistrationNumber,
-            qrCodeType = "dynamic",
-            defaultPoints = 1,
-            subscriptionTier = "free",
-            acceptTerms,
-            latitude,
-            longitude
-        } = req.body as RegisterSellerData;
-
-        // Validation
-        if (!email || !password || !name || !shopName || !phone) {
-            return res.status(400).json({
-                error: "Missing required fields: email, password, name, shopName, phone"
-            });
-        }
-
-        if (!acceptTerms) {
-            return res.status(400).json({
-                error: "You must accept the terms and conditions"
-            });
-        }
-
         try {
-            // 1. Create Firebase Auth user
+            const data = req.body as RegisterSellerData;
+
+            const {
+                email,
+                password,
+                name,
+                shopName,
+                phone,
+                businessType,
+                category,
+                description,
+                street,
+                city,
+                state,
+                pincode,
+                country = "India",
+                enableLocation = false,
+                locationRadius = 100,
+                gstNumber,
+                panNumber,
+                businessRegistrationNumber,
+                qrCodeType = "dynamic",
+                defaultPoints = 1,
+                subscriptionTier = "free",
+                acceptTerms,
+                latitude,
+                longitude,
+                establishedYear
+            } = data;
+
+            // Validation
+            if (!email || !password || !name || !shopName || !phone) {
+                return res.status(400).json({
+                    error: "Missing required fields: email, password, name, shopName, phone",
+                });
+            }
+
+            if (!acceptTerms) {
+                return res.status(400).json({
+                    error: "You must accept the terms and conditions",
+                });
+            }
+
+            // 1. Create Firebase Auth User
             const user = await auth.createUser({
                 email,
                 password,
                 displayName: name,
-                emailVerified: false
             });
 
-            // 2. Create user document in 'users' collection
-            const userDoc = {
+            // 2. Create main user doc
+            await db.collection("users").doc(user.uid).set({
                 uid: user.uid,
                 email,
                 name,
@@ -98,64 +101,86 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                 role: "seller",
                 createdAt: adminRef.firestore.FieldValue.serverTimestamp(),
                 updatedAt: adminRef.firestore.FieldValue.serverTimestamp(),
-            };
+            });
 
-            await db.collection("users").doc(user.uid).set(userDoc);
-
-            // 3. Create seller profile in 'seller_profiles' collection
+            // 3. Build structured seller profile
             const sellerProfile = {
-                // Basic Information
                 user_id: user.uid,
-                email,
-                phone,
 
-                // Business Information
-                shop_name: shopName,
-                business_type: businessType,
-                category,
-                description,
-
-                // Location Information
-                address: {
-                    street,
-                    city,
-                    state,
-                    pincode,
-                    country,
+                account: {
+                    name,
+                    email,
+                    phone,
+                    established_year: establishedYear || null,
                 },
-                location_lat: latitude, // Can be set later
-                location_lng: longitude, // Can be set later
-                location_radius_meters: enableLocation ? locationRadius : null,
 
-                // Business Verification
-                gst_number: gstNumber || null,
-                pan_number: panNumber || null,
-                business_registration_number: businessRegistrationNumber || null,
-                is_verified: false,
-                verification_status: 'pending',
+                business: {
+                    shop_name: shopName,
+                    business_type: businessType,
+                    category,
+                    description,
+                },
 
-                // QR Code Settings
-                qr_code_type: qrCodeType,
-                default_points_value: defaultPoints,
-                subscription_tier: subscriptionTier,
+                location: {
+                    address: {
+                        street,
+                        city,
+                        state,
+                        pincode,
+                        country,
+                    },
+                    lat: latitude || null,
+                    lng: longitude || null,
+                    radius_meters: enableLocation ? locationRadius : null,
+                },
 
-                // Media
-                logo_url: null,
-                banner_url: null,
-                gallery_urls: [],
+                verification: {
+                    gst_number: gstNumber || null,
+                    pan_number: panNumber || null,
+                    business_registration_number: businessRegistrationNumber || null,
+                    status: "pending",
+                    is_verified: false,
+                },
 
-                // Statistics
-                total_scans: 0,
-                total_points_distributed: 0,
-                active_customers: 0,
-                monthly_scans: 0,
+                rewards: {
+                    default_points_value: defaultPoints,
+                    reward_points: 50,
+                    reward_description: "",
+                    reward_name: "",
+                },
 
-                // Settings
-                notifications_enabled: true,
-                email_notifications: true,
-                push_notifications: true,
+                qr_settings: {
+                    qr_code_type: qrCodeType,
+                },
 
-                // Timestamps
+                subscription: {
+                    tier: subscriptionTier,
+                    monthly_limit: getMonthlyQRLimit(subscriptionTier),
+                    price: getSubscriptionPrice(subscriptionTier),
+                    status: "active",
+                    period_start: adminRef.firestore.FieldValue.serverTimestamp(),
+                    period_end: getSubscriptionEndDate(),
+                },
+
+                media: {
+                    logo_url: null,
+                    banner_url: null,
+                    gallery_urls: [],
+                },
+
+                stats: {
+                    total_scans: 0,
+                    total_points_distributed: 0,
+                    active_customers: 0,
+                    monthly_scans: 0,
+                },
+
+                settings: {
+                    notifications_enabled: true,
+                    email_notifications: true,
+                    push_notifications: true,
+                },
+
                 created_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 last_active: adminRef.firestore.FieldValue.serverTimestamp(),
@@ -163,27 +188,10 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
 
             await db.collection("seller_profiles").doc(user.uid).set(sellerProfile);
 
-            // 4. Create subscription record
-            const subscriptionData = {
-                seller_id: user.uid,
-                tier: subscriptionTier,
-                monthly_qr_limit: getMonthlyQRLimit(subscriptionTier),
-                price: getSubscriptionPrice(subscriptionTier),
-                status: 'active',
-                current_period_start: adminRef.firestore.FieldValue.serverTimestamp(),
-                current_period_end: getSubscriptionEndDate(),
-                created_at: adminRef.firestore.FieldValue.serverTimestamp(),
-            };
-
-            await db.collection("seller_subscriptions").doc(user.uid).set(subscriptionData);
-
-            // 5. Send welcome email (optional)
+            // 4. Welcome Email (optional)
             try {
                 await sendWelcomeEmail(email, name, shopName);
-            } catch (emailError) {
-                console.error("Failed to send welcome email:", emailError);
-                // Don't fail registration if email fails
-            }
+            } catch { }
 
             return res.status(200).json({
                 success: true,
@@ -193,31 +201,20 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                     email,
                     name,
                     shopName,
-                    role: "seller"
-                }
+                    role: "seller",
+                },
             });
-
         } catch (error: any) {
-            console.error("Seller registration error:", error);
+            console.error("Registration Error:", error);
 
-            // Handle specific Firebase auth errors
-            if (error.code === 'auth/email-already-exists') {
-                return res.status(400).json({
-                    error: "Email already exists. Please use a different email."
-                });
-            } else if (error.code === 'auth/invalid-email') {
-                return res.status(400).json({
-                    error: "Invalid email address."
-                });
-            } else if (error.code === 'auth/weak-password') {
-                return res.status(400).json({
-                    error: "Password is too weak. Please use a stronger password."
-                });
+            if (error.code === "auth/email-already-exists") {
+                return res.status(400).json({ error: "Email already exists" });
             }
 
-            return res.status(500).json({
-                error: "Registration failed. Please try again."
-            });
+            return res
+                .status(500)
+                .json({ error: "Registration failed. Please try again." });
         }
     });
 });
+

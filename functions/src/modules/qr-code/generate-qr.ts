@@ -1,5 +1,5 @@
 import * as functions from "firebase-functions";
-import { db } from "../../config/firebase";
+import { adminRef, db } from "../../config/firebase";
 import { authenticateUser, handleAuthError } from "../../middleware/auth";
 import { generateQRBase64, generateQRId, generateHiddenCode } from "../../utils/qr-helper";
 import { QRCodeGenerateRequest, QRCodeResponse } from "./types";
@@ -63,11 +63,30 @@ export const generateQRCode = functions.https.onRequest(async (request, response
             const qrId = generateQRId();
             let hiddenCode: string | null = null;
             let expiresAt: Date | null = null;
+            let oldQrId = null;
 
             if (qrType === 'dynamic') {
                 expiresAt = new Date(Date.now() + (expires_in_minutes * 60 * 1000));
             } else if (qrType === 'static_hidden') {
                 hiddenCode = generateHiddenCode(8);
+            }
+
+            // 1️⃣ Fetch active QR for this seller
+            const activeQR = await db
+                .collection("qr_codes")
+                .where("seller_id", "==", sellerId)
+                .where("status", "==", "active")
+                .limit(1)
+                .get();
+
+            // 2️⃣ If one exists, mark it as inactive
+            if (!activeQR.empty) {
+                const oldQR = activeQR.docs[0];
+                oldQrId = oldQR.id;
+                await db.collection("qr_codes").doc(oldQR.id).update({
+                    status: "inactive",
+                    deactivated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                });
             }
 
             // Create QR document
@@ -78,8 +97,10 @@ export const generateQRCode = functions.https.onRequest(async (request, response
                 points_value: points_value,
                 used: false,
                 expires_at: expiresAt,
+                status: 'active',
                 hidden_code: hiddenCode,
-                created_at: new Date()
+                created_at: new Date(),
+                previous_qr_id: oldQrId
             };
 
             await db.collection('qr_codes').add(qrDoc);

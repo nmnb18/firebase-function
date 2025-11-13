@@ -5,7 +5,7 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getUserDetails = functions.https.onRequest((req, res) => {
+export const getSellerDetails = functions.https.onRequest((req, res) => {
     corsHandler(req, res, async () => {
         if (req.method !== "GET") return res.status(405).json({ error: "GET only" });
 

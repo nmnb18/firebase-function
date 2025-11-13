@@ -1,6 +1,7 @@
 export { registerSeller } from "./modules/auth/registerSeller";
 export { loginSeller } from "./modules/auth/loginSeller";
-export { getUserDetails } from "./modules/users/getUserDetails";
+export { getSellerDetails } from "./modules/seller/get-seller-details";
+export { updateSellerProfile } from "./modules/seller/update-seller";
 export { logoutSeller } from './modules/auth/logoutSeller';
 export { generateBatchQRCodes } from './modules/qr-code/generate-batch';
 export { scanQRCode } from './modules/qr-code/scan-qr';
@@ -11,3 +12,4 @@ export { refreshToken } from './modules/auth/refreshToken';
 export { createOrder } from './modules/payments/createOrder';
 export { verifyPayment } from './modules/payments/verifyPayment';
 export { countMonthlyQRCodes } from './modules/qr-code/count-monthly';
+export { sellerAdvancedAnalytics } from './modules/seller/advance-analytics';

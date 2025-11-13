@@ -13,3 +13,6 @@ export { createOrder } from './modules/payments/createOrder';
 export { verifyPayment } from './modules/payments/verifyPayment';
 export { countMonthlyQRCodes } from './modules/qr-code/count-monthly';
 export { sellerAdvancedAnalytics } from './modules/seller/advance-analytics';
+export { deleteSellerAccount } from "./modules/auth/deleteSeller";
+export { reauthenticate } from "./modules/auth/reauthenticate";
+export { changePassword } from "./modules/auth/changePassword";

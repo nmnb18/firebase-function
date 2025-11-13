@@ -2,6 +2,7 @@ import * as functions from "firebase-functions";
 import { db, auth } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { enforceSubscriptionStatus } from "@utils/subscription";
 
 const corsHandler = cors({ origin: true });
 
@@ -34,7 +35,8 @@ export const getSellerDetails = functions.https.onRequest((req, res) => {
 
             let sellerProfile = null;
             if (!sellerSnap.empty) {
-                sellerProfile = sellerSnap.docs[0].data();
+                const tempSellerProfile = sellerSnap.docs[0].data();
+                sellerProfile = await enforceSubscriptionStatus(tempSellerProfile, currentUser.uid);
             }
 
             return res.status(200).json({

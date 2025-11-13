@@ -73,6 +73,19 @@
       {
         "source": "/api/v1/seller/advance-analytics",
         "function": "sellerAdvancedAnalytics"
+      },
+      {
+        "source": "/api/v1/auth/delete-seller",
+        "function": "deleteSellerAccount"
+      },
+
+      {
+        "source": "/api/v1/auth/reauthenticate",
+        "function": "reauthenticate"
+      },
+      {
+        "source": "/api/v1/auth/change-password",
+        "function": "changePassword"
       }
     ]
   },

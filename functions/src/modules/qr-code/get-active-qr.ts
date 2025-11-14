@@ -1,5 +1,5 @@
 import * as functions from "firebase-functions";
-import { db } from "../../config/firebase";
+import { db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { generateQRBase64 } from "../../utils/qr-helper";
@@ -19,50 +19,56 @@ export const getActiveQR = functions.https.onRequest(async (req, res) => {
                 return res.status(401).json({ error: "Unauthorized" });
             }
 
-            // 1️⃣ Find seller profile
-            const profilesRef = db.collection("seller_profiles");
-            const profileQuery = await profilesRef
+            // 1️⃣ Get seller profile
+            const sellerQuery = await db.collection("seller_profiles")
                 .where("user_id", "==", currentUser.uid)
                 .limit(1)
                 .get();
 
-            if (profileQuery.empty) {
+            if (sellerQuery.empty) {
                 return res.status(404).json({ error: "Seller profile not found" });
             }
 
-            const sellerDoc = profileQuery.docs[0];
-            const sellerId = sellerDoc.id;
+            const sellerId = sellerQuery.docs[0].id;
 
-            // 2️⃣ Get all active (or recently expired) QRs for seller
-            const qrRef = db.collection("qr_codes");
-            const qrQuery = await qrRef
+            // 2️⃣ Fetch the ONLY active QR for this seller
+            const qrQuery = await db.collection("qr_codes")
                 .where("seller_id", "==", sellerId)
-                .orderBy("created_at", "desc")
-                .limit(5)
+                .where("status", "==", "active")
+                .limit(1)
                 .get();
 
-            const now = Date.now();
-            let activeQR: any = null;
-
-            qrQuery.forEach((doc) => {
-                const qr = doc.data();
-                if (qr.qr_type === "dynamic" && qr.expires_at && qr.expires_at.toMillis() > now) {
-                    if (!activeQR) activeQR = { id: doc.id, ...qr };
-                } else if (qr.qr_type === "static") {
-                    // fallback static QR if no dynamic active
-                    if (!activeQR) activeQR = { id: doc.id, ...qr };
-                }
-            });
-
-            if (!activeQR) {
+            // 3️⃣ No active QR exists
+            if (qrQuery.empty) {
                 return res.status(204).json({ success: true, data: {} });
             }
 
-            const qrData = `grabbitt://${activeQR.qr_id}`;
+            const qrDoc = qrQuery.docs[0];
+            const qr = qrDoc.data() as QRCodeResponse;
+            const now = Date.now();
+
+            // 4️⃣ Check expiry (for dynamic QR)
+            if (qr.qr_type === "dynamic" && qr.expires_at) {
+                const expiresAt = qr.expires_at.getTime()
+
+
+                if (expiresAt <= now) {
+                    await qrDoc.ref.update({
+                        status: "inactive",
+                        expired_at: new Date(),
+                    });
+
+                    return res.status(204).json({ success: true, data: {} });
+                }
+            }
+
+
+            // 5️⃣ Generate QR base64 to send back
+            const qrData = `grabbitt://${qr.qr_id}`;
             const qrBase64 = await generateQRBase64(qrData);
 
             const responseData: QRCodeResponse = {
-                ...activeQR,
+                ...qr,
                 qr_code_base64: qrBase64,
             };
 
@@ -70,7 +76,7 @@ export const getActiveQR = functions.https.onRequest(async (req, res) => {
 
         } catch (error: any) {
             console.error("getActiveQR error:", error);
-            return res.status(500).json({ error: error.message || "Server error" });
+            return res.status(500).json({ error: error.message || "Internal server error" });
         }
     });
 });

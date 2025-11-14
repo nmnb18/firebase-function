@@ -2,7 +2,7 @@ import * as functions from "firebase-functions";
 import { db, auth } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
-import { enforceSubscriptionStatus } from "@utils/subscription";
+import { enforceSubscriptionStatus } from "../../utils/subscription";
 
 const corsHandler = cors({ origin: true });
 

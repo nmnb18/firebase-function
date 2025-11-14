@@ -16,3 +16,5 @@ export { sellerAdvancedAnalytics } from './modules/seller/advance-analytics';
 export { deleteSellerAccount } from "./modules/auth/deleteSeller";
 export { reauthenticate } from "./modules/auth/reauthenticate";
 export { changePassword } from "./modules/auth/changePassword";
+export { requestPasswordReset } from "./modules/auth/requestPasswordReset";
+export { confirmPasswordReset } from "./modules/auth/confirmPasswordReset";

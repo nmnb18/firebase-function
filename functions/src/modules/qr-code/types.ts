@@ -1,3 +1,5 @@
+import { adminRef } from "../../config/firebase";
+
 export interface QRCodeGenerateRequest {
     points_value?: number;
     expires_in_minutes?: number;
@@ -16,7 +18,7 @@ export interface QRCodeResponse {
     qr_id: string;
     qr_code_base64: string;
     qr_type: string;
-    expires_at?: Date | null;
+    expires_at?: adminRef.firestore.Timestamp | Date | null;
     hidden_code?: string | null;
 }
 

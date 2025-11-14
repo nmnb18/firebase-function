@@ -49,13 +49,14 @@ export const getActiveQR = functions.https.onRequest(async (req, res) => {
 
             // 4️⃣ Check expiry (for dynamic QR)
             if (qr.qr_type === "dynamic" && qr.expires_at) {
-                const expiresAt = qr.expires_at.getTime()
-
+                const expiresAt = qr.expires_at instanceof Date
+                    ? qr.expires_at.getTime()   // JS Date
+                    : qr.expires_at.toMillis();
 
                 if (expiresAt <= now) {
                     await qrDoc.ref.update({
                         status: "inactive",
-                        expired_at: new Date(),
+                        expires_at: new Date(),
                     });
 
                     return res.status(204).json({ success: true, data: {} });

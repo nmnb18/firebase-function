@@ -32,7 +32,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(async (req, res
             const profileDoc = profileQuery.docs[0];
             const sellerId = profileDoc.id;
             const sellerData = profileDoc.data();
-            const tier: "free" | "pro" | "premium" = sellerData.subscription_tier || "free";
+            const tier: "free" | "pro" | "premium" = sellerData.subscription.tier || "free";
 
             // 3) BLOCK FREE TIER
             if (tier === "free") {
@@ -301,7 +301,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(async (req, res
                 success: true,
                 data: {
                     seller_id: sellerId,
-                    seller_name: sellerData?.shop_name ?? null,
+                    seller_name: sellerData?.business.shop_name ?? null,
                     subscription_tier: tier,
 
                     // A

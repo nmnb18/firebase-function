@@ -18,7 +18,7 @@ interface FirebaseAuthResponse {
     expiresIn: string;
 }
 
-export const loginSeller = functions.https.onRequest(
+export const loginUser = functions.https.onRequest(
     { secrets: ["API_KEY"] },
     (req, res) => {
         corsHandler(req, res, async () => {
@@ -53,13 +53,6 @@ export const loginSeller = functions.https.onRequest(
                 // 3️⃣ Verify role
                 if (userData?.role !== role) {
                     return res.status(403).json({ error: "Invalid account type for this login" });
-                }
-
-                // 4️⃣ Verify approved/verified status
-                if (!userData?.verified || userData?.verified === false) {
-                    return res.status(403).json({
-                        error: "Your account is pending verification. Please wait for approval."
-                    });
                 }
 
                 // 5️⃣ Login via Firebase REST API (password check)

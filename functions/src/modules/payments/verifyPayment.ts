@@ -4,27 +4,10 @@ import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { generateInternalOrderId } from "../../utils/helper";
+import { PLAN_CONFIG } from "../../utils/constant";
 
 const corsHandler = cors({ origin: true });
 
-// Helper: plan metadata
-const PLAN_CONFIG = {
-    free: {
-        durationDays: 30,
-        price: 0,
-        monthly_qr_limit: 10,
-    },
-    pro: {
-        durationDays: 30, // 1 month
-        price: 299,
-        monthly_qr_limit: 999999, // practically unlimited
-    },
-    premium: {
-        durationDays: 365, // 1 year
-        price: 2999,
-        monthly_qr_limit: 999999, // unlimited
-    },
-};
 
 export const verifyPayment = functions.https.onRequest(
     { secrets: ["RAZORPAY_ENV", "RAZORPAY_SECRET_TEST"] },
@@ -35,7 +18,6 @@ export const verifyPayment = functions.https.onRequest(
             }
 
             try {
-                // 🔒 Authenticate Firebase user via Bearer token
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
                     return res.status(401).json({ error: "Unauthorized" });
@@ -47,6 +29,7 @@ export const verifyPayment = functions.https.onRequest(
                     razorpay_signature,
                     sellerId,
                     planId,
+                    couponCode,
                 } = req.body;
 
                 if (
@@ -66,7 +49,7 @@ export const verifyPayment = functions.https.onRequest(
                         ? process.env.RAZORPAY_SECRET_LIVE!
                         : process.env.RAZORPAY_SECRET_TEST!;
 
-                // ✅ Verify Razorpay signature
+                // Verify Razorpay signature
                 const sign = razorpay_order_id + "|" + razorpay_payment_id;
                 const expectedSignature = crypto
                     .createHmac("sha256", key_secret)
@@ -79,32 +62,54 @@ export const verifyPayment = functions.https.onRequest(
                         .json({ success: false, error: "Invalid signature" });
                 }
 
-                // Plan validation
                 const plan = PLAN_CONFIG[planId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
                     return res.status(400).json({ success: false, error: "Invalid plan" });
                 }
+
+                // Get payment record to check for coupon
+                const paymentDoc = await db.collection("payments").doc(razorpay_order_id).get();
+                if (!paymentDoc.exists) {
+                    return res.status(400).json({ success: false, error: "Order not found" });
+                }
+
+                const paymentData = paymentDoc.data();
+                const couponUsed = paymentData?.coupon;
+                const amountPaid = paymentData?.amount ? paymentData.amount / 100 : plan.price; // Convert from paise
 
                 const now = new Date();
                 const expiryDate = new Date(
                     now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
                 );
 
-                // Generate internal Grabbit order ID
                 const internalOrderId = await generateInternalOrderId();
 
-                // ✅ Mark payment as successful
-                await db.collection("payments").doc(razorpay_order_id).update({
+                // Update payment record
+                const paymentUpdate: any = {
                     status: "paid",
                     razorpay_payment_id,
                     razorpay_signature,
                     verified_at: adminRef.firestore.FieldValue.serverTimestamp(),
                     plan_id: planId,
-                    amount_paid: plan.price,
+                    amount_paid: amountPaid,
                     environment: env,
-                });
+                };
 
-                // ✅ Update seller profile with new plan info
+                if (couponUsed) {
+                    paymentUpdate.coupon = {
+                        ...couponUsed,
+                        appliedAt: adminRef.firestore.FieldValue.serverTimestamp()
+                    };
+                }
+
+                await db.collection("payments").doc(razorpay_order_id).update(paymentUpdate);
+
+                // Update coupon usage if coupon was applied
+                if (couponUsed) {
+                    await updateCouponUsage(couponUsed.couponId, sellerId, internalOrderId, couponUsed.discountAmount / 100);
+                }
+
+                // Update seller profile
                 await db.collection("seller_profiles").doc(sellerId).update({
                     subscription: {
                         tier: planId,
@@ -115,51 +120,61 @@ export const verifyPayment = functions.https.onRequest(
                             order_id: internalOrderId,
                             razorpay_order_id,
                             payment_id: razorpay_payment_id,
-                            amount: plan.price,
+                            amount: amountPaid,
                             environment: env,
-                            paid_at: adminRef.firestore.FieldValue.serverTimestamp()
+                            paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                            coupon_used: couponUsed ? couponUsed.code : null,
+                            discount_amount: couponUsed ? couponUsed.discountAmount / 100 : 0
                         }
                     }
                 });
 
-                // ✅ Update subscription record
+                // Update subscription record
                 await db.collection("seller_subscriptions").doc(sellerId).set(
                     {
                         tier: planId,
                         status: "active",
-                        price: plan.price,
+                        price: amountPaid,
+                        original_price: plan.price,
                         monthly_qr_limit: plan.monthly_qr_limit,
-                        current_period_start:
-                            adminRef.firestore.FieldValue.serverTimestamp(),
-                        current_period_end: adminRef.firestore.Timestamp.fromDate(
-                            expiryDate
-                        ),
+                        current_period_start: adminRef.firestore.FieldValue.serverTimestamp(),
+                        current_period_end: adminRef.firestore.Timestamp.fromDate(expiryDate),
                         order_id: internalOrderId,
                         updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                        coupon_used: couponUsed ? couponUsed.code : null,
+                        discount_amount: couponUsed ? couponUsed.discountAmount / 100 : 0
                     },
                     { merge: true }
                 );
 
-
-
                 // Create subscription history entry
+                const historyData: any = {
+                    internal_order_id: internalOrderId,
+                    razorpay_order_id,
+                    razorpay_payment_id,
+                    razorpay_signature,
+                    plan_id: planId,
+                    seller_id: sellerId,
+                    amount: amountPaid,
+                    original_amount: plan.price,
+                    environment: env,
+                    status: "paid",
+                    paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    expires_at: adminRef.firestore.Timestamp.fromDate(expiryDate),
+                };
+
+                if (couponUsed) {
+                    historyData.coupon = {
+                        code: couponUsed.code,
+                        discount_amount: couponUsed.discountAmount / 100,
+                    };
+                }
+
                 await db
                     .collection("subscription_history")
                     .doc(sellerId)
                     .collection("records")
-                    .add({
-                        internal_order_id: internalOrderId,
-                        razorpay_order_id,
-                        razorpay_payment_id,
-                        razorpay_signature,
-                        plan_id: planId,
-                        seller_id: sellerId,
-                        amount: plan.price,
-                        environment: env,
-                        status: "paid",
-                        paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
-                        expires_at: adminRef.firestore.Timestamp.fromDate(expiryDate),
-                    });
+                    .add(historyData);
 
                 return res.status(200).json({
                     success: true,
@@ -169,6 +184,10 @@ export const verifyPayment = functions.https.onRequest(
                         order_id: internalOrderId,
                         expires_at: expiryDate.toISOString(),
                         monthly_qr_limit: plan.monthly_qr_limit,
+                        amount_paid: amountPaid,
+                        original_amount: plan.price,
+                        discount_amount: couponUsed ? couponUsed.discountAmount / 100 : 0,
+                        coupon_used: couponUsed ? couponUsed.code : null,
                     },
                 });
             } catch (error: any) {
@@ -180,3 +199,27 @@ export const verifyPayment = functions.https.onRequest(
         });
     }
 );
+
+// Helper function to update coupon usage
+async function updateCouponUsage(couponId: string, sellerId: string, orderId: string, discountAmount: number) {
+    const batch = db.batch();
+
+    // Increment coupon usage count
+    const couponRef = db.collection("coupons").doc(couponId);
+    batch.update(couponRef, {
+        usedCount: adminRef.firestore.FieldValue.increment(1),
+        lastUsedAt: adminRef.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Record coupon usage
+    const usageRef = db.collection("coupon_usage").doc();
+    batch.set(usageRef, {
+        couponId,
+        sellerId,
+        orderId,
+        discountAmount,
+        usedAt: adminRef.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+}

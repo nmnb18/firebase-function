@@ -1,11 +1,14 @@
 import * as functions from "firebase-functions";
 import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
-import { getMonthlyQRLimit, getSubscriptionEndDate, getSubscriptionPrice, sendWelcomeEmail } from "../../utils/helper";
+import {
+    getMonthlyQRLimit,
+    getSubscriptionEndDate,
+    getSubscriptionPrice,
+    sendWelcomeEmail
+} from "../../utils/helper";
 
 const corsHandler = cors({ origin: true });
-
-
 
 interface RegisterSellerData {
     email: string;
@@ -13,26 +16,41 @@ interface RegisterSellerData {
     name: string;
     shopName: string;
     phone: string;
-    businessType: "retail" | "restaurant" | "service" | "fmcg" | "other";
+    businessType: string;
     category: string;
     description: string;
+
     street: string;
     city: string;
     state: string;
     pincode: string;
     country?: string;
+
     enableLocation?: boolean;
     locationRadius?: number;
+    latitude?: number | null;
+    longitude?: number | null;
+
     gstNumber?: string;
     panNumber?: string;
     businessRegistrationNumber?: string;
+
+    /** Rewards */
+    rewardType?: "default" | "flat" | "percentage" | "slab";
+    defaultPoints?: number;
+    flatPoints?: number;
+    percentageValue?: number;
+    slabRules?: Array<{ min: number; max: number; points: number }>;
+    rewardName?: string;
+    rewardDescription?: string;
+    paymentRewardEnabled?: boolean;
+    dailyMaxPoints?: number;
+    upiIds: string[];
     qrCodeType: "dynamic" | "static" | "static_hidden";
-    defaultPoints: number;
     subscriptionTier: "free" | "pro" | "enterprise";
-    acceptTerms: boolean;
-    latitude?: number | null;
-    longitude?: number | null;
+
     establishedYear?: string | null;
+    acceptTerms: boolean;
 }
 
 export const registerSeller = functions.https.onRequest(async (req, res) => {
@@ -44,6 +62,9 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
         try {
             const data = req.body as RegisterSellerData;
 
+            // ------------------------------
+            // 🔍 Validate Required Fields
+            // ------------------------------
             const {
                 email,
                 password,
@@ -60,19 +81,17 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                 country = "India",
                 enableLocation = false,
                 locationRadius = 100,
+                latitude,
+                longitude,
                 gstNumber,
                 panNumber,
                 businessRegistrationNumber,
                 qrCodeType = "dynamic",
-                defaultPoints = 1,
                 subscriptionTier = "free",
+                establishedYear,
                 acceptTerms,
-                latitude,
-                longitude,
-                establishedYear
             } = data;
-
-            // Validation
+            console.error(data);
             if (!email || !password || !name || !shopName || !phone) {
                 return res.status(400).json({
                     error: "Missing required fields: email, password, name, shopName, phone",
@@ -85,25 +104,33 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                 });
             }
 
-            // 1. Create Firebase Auth User
+            // ------------------------------
+            // 🔐 Create Firebase Auth User
+            // ------------------------------
             const user = await auth.createUser({
                 email,
                 password,
                 displayName: name,
             });
 
-            // 2. Create main user doc
+            // ------------------------------
+            // 👤 Create base user record
+            // ------------------------------
             await db.collection("users").doc(user.uid).set({
                 uid: user.uid,
                 email,
                 name,
                 phone,
                 role: "seller",
+                verified: false,
                 createdAt: adminRef.firestore.FieldValue.serverTimestamp(),
                 updatedAt: adminRef.firestore.FieldValue.serverTimestamp(),
             });
 
-            // 3. Build structured seller profile
+            // ------------------------------
+            // 🏪 Build Seller Profile Object
+            // ------------------------------
+            console.log(data);
             const sellerProfile = {
                 user_id: user.uid,
 
@@ -142,12 +169,31 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                     is_verified: false,
                 },
 
+                // ---------------------------------------------------
+                // ⭐ REWARD SETTINGS (All 4 Types Supported)
+                // ---------------------------------------------------
                 rewards: {
-                    default_points_value: defaultPoints,
-                    reward_points: 50,
-                    reward_description: "",
-                    reward_name: "",
+                    enabled: true,
+
+                    reward_type: data.rewardType ?? "default",
+
+                    default_points_value: data.defaultPoints ?? 1,
+
+                    flat_points: data.flatPoints ?? 0,
+
+                    percentage_value: data.percentageValue ?? 0,
+
+                    slab_rules: data.slabRules ?? [],
+
+                    payment_reward_enabled: data.upiIds?.length > 0,
+
+                    daily_max_points: data.dailyMaxPoints ?? 100,
+
+                    reward_name: data.rewardName ?? "",
+                    reward_description: data.rewardDescription ?? "",
                 },
+
+                upiIds: data.upiIds,
 
                 qr_settings: {
                     qr_code_type: qrCodeType,
@@ -186,13 +232,21 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                 last_active: adminRef.firestore.FieldValue.serverTimestamp(),
             };
 
+            // ------------------------------
+            // 📝 Save Seller Profile
+            // ------------------------------
             await db.collection("seller_profiles").doc(user.uid).set(sellerProfile);
 
-            // 4. Welcome Email (optional)
+            // ------------------------------
+            // ✉ Optional Welcome Email
+            // ------------------------------
             try {
                 await sendWelcomeEmail(email, name, shopName);
             } catch { }
 
+            // ------------------------------
+            // 🎉 Success Response
+            // ------------------------------
             return res.status(200).json({
                 success: true,
                 message: "Seller registered successfully",
@@ -204,6 +258,7 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                     role: "seller",
                 },
             });
+
         } catch (error: any) {
             console.error("Registration Error:", error);
 
@@ -211,10 +266,10 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                 return res.status(400).json({ error: "Email already exists" });
             }
 
-            return res
-                .status(500)
-                .json({ error: "Registration failed. Please try again." });
+            return res.status(500).json({
+                error: "Registration failed. Please try again.",
+                details: error.message,
+            });
         }
     });
 });
-

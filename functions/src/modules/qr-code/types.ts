@@ -12,6 +12,8 @@ export interface QRCodeScanRequest {
     hidden_code?: string;
     user_lat?: number;
     user_lng?: number;
+    payment_amount: number;
+    payment_based: number;
 }
 
 export interface QRCodeResponse {

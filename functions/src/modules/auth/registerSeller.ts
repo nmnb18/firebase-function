@@ -130,7 +130,6 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
             // ------------------------------
             // 🏪 Build Seller Profile Object
             // ------------------------------
-            console.log(data);
             const sellerProfile = {
                 user_id: user.uid,
 

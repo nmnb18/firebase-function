@@ -70,6 +70,8 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 payment_based       // NEW 🔥 boolean
             } = req.body as QRCodeScanRequest;
 
+            console.log('Req Body:', req.body)
+
             if (!qr_id) {
                 return res.status(400).json({ error: "QR ID is required" });
             }
@@ -89,8 +91,11 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
 
             const qrDoc = qrQuery.docs[0];
             const qrData = qrDoc.data();
+
+            console.log('QR Data:', qrData)
             const qrType = qrData.qr_type || "dynamic";
             const sellerId = qrData.seller_id;
+            const rewardType = qrData.reward_type;
 
             // -----------------------------------
             // Fetch Seller Profile
@@ -145,7 +150,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 await db.collection("transactions").add({
                     user_id: currentUser.uid,
                     seller_id: sellerId,
-                    seller_name: seller?.shop_name,
+                    seller_name: seller?.business?.shop_name,
                     points: rewardPoints,
                     amount: payment_amount,
                     transaction_type: "earn",
@@ -161,7 +166,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                         qr_type: "payment",
                         points_earned: rewardPoints,
                         total_points: newPoints,
-                        seller_name: seller?.shop_name
+                        seller_name: seller?.business?.shop_name,
                     }
                 });
             }
@@ -198,16 +203,16 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
-                const dailyScanQuery = await db.collection("daily_scans")
-                    .where("user_id", "==", currentUser.uid)
-                    .where("seller_id", "==", sellerId)
-                    .where("scan_date", ">=", today)
-                    .limit(1)
-                    .get();
+                // const dailyScanQuery = await db.collection("daily_scans")
+                //     .where("user_id", "==", currentUser.uid)
+                //     .where("seller_id", "==", sellerId)
+                //     .where("scan_date", ">=", today)
+                //     .limit(1)
+                //     .get();
 
-                if (!dailyScanQuery.empty) {
-                    return res.status(400).json({ error: "Already scanned today" });
-                }
+                // if (!dailyScanQuery.empty) {
+                //     return res.status(400).json({ error: "Already scanned today" });
+                // }
 
                 // Location check
                 if (seller?.location_lat && seller.location_lng) {
@@ -299,7 +304,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
             await db.collection("transactions").add({
                 user_id: currentUser.uid,
                 seller_id: sellerId,
-                seller_name: seller?.shop_name,
+                seller_name: seller?.business?.shop_name,
                 points: pointsValue,
                 transaction_type: "earn",
                 qr_type: qrType,
@@ -314,7 +319,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                     qr_type: qrType,
                     points_earned: pointsValue,
                     total_points: newPoints,
-                    seller_name: seller?.shop_name
+                    seller_name: seller?.business?.shop_name,
                 }
             });
 

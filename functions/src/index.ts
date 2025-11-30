@@ -24,3 +24,5 @@ export { registerUser } from "./modules/auth/registerUser";
 export { getUserDetails } from "./modules/user/get-user-details";
 export { getNearbySellers } from "./modules/seller/get-near-by-seller";
 export { getSubscriptionHistory } from "./modules/seller/get-subscription-history";
+export { findSellerByUPI } from "./modules/seller/findSellerByUPI";
+export { testConnection } from "./modules/test";

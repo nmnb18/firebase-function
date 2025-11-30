@@ -10,102 +10,18 @@
       "storage-debug.log"
     ]
   },
-  "hosting": {
-    "public": "public",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "/api/v1/auth/register-seller",
-        "function": "registerSeller"
-      },
-      {
-        "source": "/api/v1/auth/login-seller",
-        "function": "loginSeller"
-      },
-      {
-        "source": "/api/v1/seller/get-seller-details",
-        "function": "getSellerDetails"
-      },
-      {
-        "source": "/api/v1/seller/update-seller",
-        "function": "updateSellerProfile"
-      },
-      {
-        "source": "/api/v1/auth/logout-seller",
-        "function": "logoutSeller"
-      },
-       {
-        "source": "/api/v1/auth/refresh-token",
-        "function": "refreshToken"
-      },
-      {
-        "source": "/api/v1/qr-code/generate-batch",
-        "function": "generateBatchQRCodes"
-      },
-      {
-        "source": "/api/v1/qr-code/scan-qr",
-        "function": "scanQRCode"
-      },
-      {
-        "source": "/api/v1/qr-code/generate-qr",
-        "function": "generateQRCode"
-      },
-      {
-        "source": "/api/v1/qr-code/count-monthly",
-        "function": "countMonthlyQRCodes"
-      },
-      {
-        "source": "/api/v1/qr-code/get-active-qr",
-        "function": "getActiveQR"
-      },
-      {
-        "source": "/api/v1/dashboard/seller-stats",
-        "function": "sellerStats"
-      },
-      {
-        "source": "/api/v1/payments/create-order",
-        "function": "createOrder"
-      },
-      {
-        "source": "/api/v1/payments/verify-payment",
-        "function": "verifyPayment"
-      },
-      {
-        "source": "/api/v1/seller/advance-analytics",
-        "function": "sellerAdvancedAnalytics"
-      },
-      {
-        "source": "/api/v1/auth/delete-seller",
-        "function": "deleteSellerAccount"
-      },
-
-      {
-        "source": "/api/v1/auth/reauthenticate",
-        "function": "reauthenticate"
-      },
-      {
-        "source": "/api/v1/auth/change-password",
-        "function": "changePassword"
-      },
-      {
-        "source": "/api/v1/auth/request-passwordreset",
-        "function": "requestPasswordReset"
-      },
-      {
-        "source": "/api/v1/auth/confirm-password-reset",
-        "function": "confirmPasswordReset"
-      }
-    ]
-  },
   "emulators": {
     "functions": {
-      "port": 5001
+      "port": 5001,
+      "host": "0.0.0.0" 
     },
     "firestore": {
-      "port": 8080
+      "port": 8080,
+      "host": "0.0.0.0" 
     },
     "auth": {
-      "port": 9099
+      "port": 9099,
+      "host": "0.0.0.0" 
     },
     "ui": {
       "enabled": true

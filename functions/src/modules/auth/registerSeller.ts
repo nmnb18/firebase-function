@@ -217,7 +217,7 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
                     total_scans: 0,
                     total_points_distributed: 0,
                     active_customers: 0,
-                    monthly_scans: 0,
+                    monthly_scans: {},
                 },
 
                 settings: {

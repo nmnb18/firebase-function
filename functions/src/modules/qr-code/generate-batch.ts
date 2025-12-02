@@ -17,7 +17,7 @@ export const generateBatchQRCodes = functions.https.onRequest(async (req, res) =
             // Verify authentication
             const currentUser = await authenticateUser(req.headers.authorization);
 
-            const { points_value = 1, batch_size = 100 } = req.body as QRCodeGenerateRequest;
+            const { amount = 1, batch_size = 100 } = req.body as QRCodeGenerateRequest;
 
             // Get seller profile
             const profilesRef = db.collection('seller_profiles');
@@ -55,7 +55,7 @@ export const generateBatchQRCodes = functions.https.onRequest(async (req, res) =
                     qr_id: qrId,
                     seller_id: sellerId,
                     qr_type: 'static_hidden',
-                    points_value: points_value,
+                    points_value: 0,
                     used: false,
                     expires_at: null,
                     hidden_code: hiddenCode,

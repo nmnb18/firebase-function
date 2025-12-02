@@ -12,7 +12,6 @@ export const findSellerByUPI = functions.https.onRequest(async (req, res) => {
             if (!currentUser?.uid) {
                 return res.status(401).json({ error: "Unauthorized" });
             }
-
             const { upiId } = req.body;
 
             if (!upiId) {
@@ -22,7 +21,7 @@ export const findSellerByUPI = functions.https.onRequest(async (req, res) => {
             // Find seller by UPI ID
             const sellersSnapshot = await db
                 .collection("seller_profiles")
-                .where("upi_ids", "array-contains", upiId)
+                .where("rewards.upi_ids", "array-contains", upiId)
                 .limit(1)
                 .get();
 
@@ -47,14 +46,14 @@ export const findSellerByUPI = functions.https.onRequest(async (req, res) => {
                 location: seller.location || {}
             };
 
-            res.status(200).json({
+            return res.status(200).json({
                 success: true,
                 seller: sellerInfo
             });
 
         } catch (error: any) {
             console.error("Find seller by UPI error:", error);
-            res.status(500).json({ error: error.message });
+            return res.status(500).json({ error: error.message });
         }
     });
 });

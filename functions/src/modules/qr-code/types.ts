@@ -1,7 +1,7 @@
 import { adminRef } from "../../config/firebase";
 
 export interface QRCodeGenerateRequest {
-    points_value?: number;
+    amount?: number;
     expires_in_minutes?: number;
     batch_size?: number;
     qr_code_type?: string

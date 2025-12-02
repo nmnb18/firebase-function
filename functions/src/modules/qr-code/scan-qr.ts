@@ -1,11 +1,64 @@
 import * as functions from "firebase-functions";
-import { db } from "../../config/firebase";
+import { adminRef, db } from "../../config/firebase";
 import { calculateDistance } from "../../utils/qr-helper";
 import { QRCodeScanRequest, ScanResponse } from "./types";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
+
+/** ----------------------------------------------------
+ * UPDATE SELLER STATS
+ * ---------------------------------------------------- */
+/** ----------------------------------------------------
+ * UPDATE SELLER STATS with monthly breakdown
+ * ---------------------------------------------------- */
+async function updateSellerStats(sellerId: string, pointsEarned: number, isNewCustomer: boolean = false) {
+    const sellerRef = db.collection("seller_profiles").doc(sellerId);
+
+    // Get current date for monthly stats
+    const now = new Date();
+    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const currentMonthKey = monthNames[now.getMonth()];
+    const currentYear = now.getFullYear();
+    const monthlyScanKey = `stats.monthly_scans.${currentYear}.${currentMonthKey}`;
+
+    // First, get the current document to update monthly scans properly
+    const sellerDoc = await sellerRef.get();
+    const sellerData = sellerDoc.data();
+
+    const updateData: any = {
+        "stats.total_scans": adminRef.firestore.FieldValue.increment(1),
+        "stats.total_points_distributed": adminRef.firestore.FieldValue.increment(pointsEarned)
+    };
+
+    // Update monthly scans - increment existing or set to 1 if doesn't exist
+    const currentMonthlyScans = sellerData?.stats?.monthly_scans || {};
+    const currentYearScans = currentMonthlyScans[currentYear] || {};
+    const currentMonthCount = currentYearScans[currentMonthKey] || 0;
+
+    updateData[monthlyScanKey] = currentMonthCount + 1;
+
+    // Only increment active_customers if this is a new customer
+    if (isNewCustomer) {
+        updateData["stats.active_customers"] = adminRef.firestore.FieldValue.increment(1);
+    }
+
+    await sellerRef.update(updateData);
+}
+
+/** ----------------------------------------------------
+ * CHECK IF USER IS NEW CUSTOMER FOR THIS SELLER
+ * ---------------------------------------------------- */
+async function isNewCustomer(userId: string, sellerId: string): Promise<boolean> {
+    const pointsQuery = await db.collection("points")
+        .where("user_id", "==", userId)
+        .where("seller_id", "==", sellerId)
+        .limit(1)
+        .get();
+
+    return pointsQuery.empty;
+}
 
 /** ----------------------------------------------------
  * UNIVERSAL REWARD CALCULATOR
@@ -15,7 +68,6 @@ function calculateRewardPoints(amount: number, seller: any): number {
     const config = seller.rewards || {};
 
     switch (config.reward_type) {
-
         // 1️⃣ Percentage-based reward
         case "percentage":
             if (!config.percentage_value) return 0;
@@ -70,8 +122,6 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 payment_based       // NEW 🔥 boolean
             } = req.body as QRCodeScanRequest;
 
-            console.log('Req Body:', req.body)
-
             if (!qr_id) {
                 return res.status(400).json({ error: "QR ID is required" });
             }
@@ -92,10 +142,8 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
             const qrDoc = qrQuery.docs[0];
             const qrData = qrDoc.data();
 
-            console.log('QR Data:', qrData)
             const qrType = qrData.qr_type || "dynamic";
             const sellerId = qrData.seller_id;
-            const rewardType = qrData.reward_type;
 
             // -----------------------------------
             // Fetch Seller Profile
@@ -105,6 +153,9 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 return res.status(404).json({ error: "Seller not found" });
             }
             const seller = sellerDoc.data();
+
+            // Check if this is a new customer
+            const newCustomer = await isNewCustomer(currentUser.uid, sellerId);
 
             // =====================================================
             // 1️⃣ PAYMENT-BASED REWARD FLOW (Razorpay Success)
@@ -159,6 +210,9 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                     description: `Payment of ₹${payment_amount} - earned ${rewardPoints} points`
                 });
 
+                // 🔥 UPDATE SELLER STATS for payment
+                await updateSellerStats(sellerId, rewardPoints, newCustomer);
+
                 return res.status(200).json({
                     success: true,
                     data: {
@@ -175,7 +229,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
             // 2️⃣ ORIGINAL QR FLOW (dynamic / static / static_hidden)
             // =====================================================
 
-            const pointsValue = qrData.points_value;
+            const pointsValue = qrType === 'static' ? qrData.points_value : calculateRewardPoints(qrData.amount, seller);
 
             // ------------------------------
             // Dynamic QR (one-time use)
@@ -202,17 +256,6 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
             if (qrType === "static") {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-
-                // const dailyScanQuery = await db.collection("daily_scans")
-                //     .where("user_id", "==", currentUser.uid)
-                //     .where("seller_id", "==", sellerId)
-                //     .where("scan_date", ">=", today)
-                //     .limit(1)
-                //     .get();
-
-                // if (!dailyScanQuery.empty) {
-                //     return res.status(400).json({ error: "Already scanned today" });
-                // }
 
                 // Location check
                 if (seller?.location_lat && seller.location_lng) {
@@ -311,6 +354,9 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 timestamp: new Date(),
                 description: `Scanned ${qrType} QR - earned ${pointsValue} pts`
             });
+
+            // 🔥 UPDATE SELLER STATS for QR scan
+            await updateSellerStats(sellerId, pointsValue, newCustomer);
 
             return res.status(200).json({
                 success: true,

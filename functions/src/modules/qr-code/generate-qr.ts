@@ -19,7 +19,7 @@ export const generateQRCode = functions.https.onRequest(async (request, response
             // Authenticate user using common helper
             const currentUser = await authenticateUser(request.headers.authorization);
 
-            const { points_value = 1, expires_in_minutes = 60, qr_code_type = 'dynamic' } = request.body as QRCodeGenerateRequest;
+            const { amount = 1, expires_in_minutes = 60, qr_code_type = 'dynamic' } = request.body as QRCodeGenerateRequest;
 
             // Get seller profile
             const profilesRef = db.collection('seller_profiles');
@@ -101,7 +101,8 @@ export const generateQRCode = functions.https.onRequest(async (request, response
                 status: 'active',
                 hidden_code: hiddenCode,
                 created_at: new Date(),
-                previous_qr_id: oldQrId
+                previous_qr_id: oldQrId,
+                amount: amount
             };
 
             await db.collection('qr_codes').add(qrDoc);

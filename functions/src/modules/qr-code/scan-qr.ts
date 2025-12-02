@@ -8,9 +8,6 @@ import { authenticateUser } from "../../middleware/auth";
 const corsHandler = cors({ origin: true });
 
 /** ----------------------------------------------------
- * UPDATE SELLER STATS
- * ---------------------------------------------------- */
-/** ----------------------------------------------------
  * UPDATE SELLER STATS with monthly breakdown
  * ---------------------------------------------------- */
 async function updateSellerStats(sellerId: string, pointsEarned: number, isNewCustomer: boolean = false) {
@@ -101,7 +98,7 @@ function calculateRewardPoints(amount: number, seller: any): number {
 }
 
 /** ----------------------------------------------------
- * MAIN SCAN LOGIC
+ * MAIN SCAN LOGIC (QR-only, no payment logic)
  * ---------------------------------------------------- */
 export const scanQRCode = functions.https.onRequest(async (req, res) => {
     corsHandler(req, res, async () => {
@@ -118,8 +115,6 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 hidden_code,
                 user_lat,
                 user_lng,
-                payment_amount,     // NEW 🔥
-                payment_based       // NEW 🔥 boolean
             } = req.body as QRCodeScanRequest;
 
             if (!qr_id) {
@@ -157,79 +152,10 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
             // Check if this is a new customer
             const newCustomer = await isNewCustomer(currentUser.uid, sellerId);
 
-            // =====================================================
-            // 1️⃣ PAYMENT-BASED REWARD FLOW (Razorpay Success)
-            // =====================================================
-            if (payment_based) {
-
-                if (!payment_amount) {
-                    return res.status(400).json({ error: "payment_amount is required" });
-                }
-
-                // Compute points using seller reward logic
-                const rewardPoints = calculateRewardPoints(payment_amount, seller);
-
-                // Allocate reward points
-                const pointsRef = db.collection("points");
-                const pointsQuery = await pointsRef
-                    .where("user_id", "==", currentUser.uid)
-                    .where("seller_id", "==", sellerId)
-                    .limit(1)
-                    .get();
-
-                let newPoints = rewardPoints;
-
-                if (!pointsQuery.empty) {
-                    const docRef = pointsQuery.docs[0].ref;
-                    const current = pointsQuery.docs[0].data().points || 0;
-
-                    newPoints = current + rewardPoints;
-                    await docRef.update({
-                        points: newPoints,
-                        last_updated: new Date()
-                    });
-                } else {
-                    await pointsRef.add({
-                        user_id: currentUser.uid,
-                        seller_id: sellerId,
-                        points: rewardPoints,
-                        last_updated: new Date()
-                    });
-                }
-
-                // Add transaction history
-                await db.collection("transactions").add({
-                    user_id: currentUser.uid,
-                    seller_id: sellerId,
-                    seller_name: seller?.business?.shop_name,
-                    points: rewardPoints,
-                    amount: payment_amount,
-                    transaction_type: "earn",
-                    qr_type: "payment",
-                    timestamp: new Date(),
-                    description: `Payment of ₹${payment_amount} - earned ${rewardPoints} points`
-                });
-
-                // 🔥 UPDATE SELLER STATS for payment
-                await updateSellerStats(sellerId, rewardPoints, newCustomer);
-
-                return res.status(200).json({
-                    success: true,
-                    data: {
-                        message: "Payment reward credited",
-                        qr_type: "payment",
-                        points_earned: rewardPoints,
-                        total_points: newPoints,
-                        seller_name: seller?.business?.shop_name,
-                    }
-                });
-            }
-
-            // =====================================================
-            // 2️⃣ ORIGINAL QR FLOW (dynamic / static / static_hidden)
-            // =====================================================
-
-            const pointsValue = qrType === 'static' ? qrData.points_value : calculateRewardPoints(qrData.amount, seller);
+            // Calculate points based on QR type
+            const pointsValue = qrType === 'static'
+                ? qrData.points_value
+                : calculateRewardPoints(qrData.amount, seller);
 
             // ------------------------------
             // Dynamic QR (one-time use)
@@ -258,8 +184,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 today.setHours(0, 0, 0, 0);
 
                 // Location check
-                if (seller?.location_lat && seller.location_lng) {
-
+                if (seller?.location.lat && seller.location.lng) {
                     if (!user_lat || !user_lng) {
                         return res.status(400).json({ error: "Location is required" });
                     }
@@ -313,7 +238,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
             }
 
             // =====================================================
-            // Allocate points for QR (non-payment scans)
+            // Allocate points for QR scan
             // =====================================================
             const pointsRef = db.collection("points");
             const pointsQuery = await pointsRef

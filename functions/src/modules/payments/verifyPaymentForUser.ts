@@ -3,7 +3,7 @@ import cors from "cors";
 import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import { calculateDistance } from "@utils/qr-helper";
+import { calculateDistance } from "../../utils/qr-helper";
 
 const corsHandler = cors({ origin: true });
 

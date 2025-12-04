@@ -190,9 +190,8 @@ export const registerSeller = functions.https.onRequest(async (req, res) => {
 
                     reward_name: data.rewardName ?? "",
                     reward_description: data.rewardDescription ?? "",
+                    upi_ids: data.upiIds
                 },
-
-                upiIds: data.upiIds,
 
                 qr_settings: {
                     qr_code_type: qrCodeType,

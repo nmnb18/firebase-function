@@ -90,7 +90,7 @@ export const getNearbySellers = functions.https.onRequest((req, res) => {
                         description: s.business?.description,
                         points_per_visit: s.rewards?.default_points_value || 1,
                         reward_points: s.stats?.total_points_distributed || 0,
-                        reward_description: s.rewards?.reward_description || "",
+                        reward_description: getRewardDescription(s.rewards),
                         lat: sLat,
                         lng: sLng,
                         distance_km: Number(distanceKm.toFixed(3)),
@@ -115,3 +115,46 @@ export const getNearbySellers = functions.https.onRequest((req, res) => {
         }
     });
 });
+
+
+function getRewardDescription(rewardConfig: any) {
+    const rewardType = rewardConfig.reward_type || 'default';
+    const rewardPoints = rewardConfig.reward_points || rewardConfig.default_points_value || 100;
+    switch (rewardType) {
+        case 'percentage':
+            const percentage = rewardConfig.percentage_value || 1;
+            return {
+                type: rewardType,
+                text: `Earn ${percentage}% of total order as points`
+            };
+
+        case 'flat':
+            const flatPoints = rewardConfig.flat_points || 1;
+            return {
+                type: rewardType,
+                text: `Earn ${flatPoints} points per transaction`
+            };
+
+        case 'slab':
+            if (Array.isArray(rewardConfig.slab_rules) && rewardConfig.slab_rules.length > 0) {
+                const rules = rewardConfig.slab_rules.map((rule: any) =>
+                    `₹${rule.min}-₹${rule.max}: ${rule.points}pts`
+                );
+                return {
+                    type: rewardType,
+                    text: rules
+                };
+            }
+            return {
+                type: rewardType,
+                text: `Earn points based on amount spent`
+            };
+
+        case 'default':
+        default:
+            return {
+                type: 'default',
+                text: `Earn ${rewardPoints} points per transaction`
+            };
+    }
+}

@@ -27,4 +27,12 @@ export { getSubscriptionHistory } from "./modules/seller/get-subscription-histor
 export { findSellerByUPI } from "./modules/seller/findSellerByUPI";
 export { createOrderForUser } from "./modules/payments/createOrderForUser";
 export { verifyPaymentForUser } from "./modules/payments/verifyPaymentForUser";
+export { getPointsBalance } from "./modules/points/get-balance";
+export { getTransactions } from "./modules/points/get-transactions";
+export { cancelRedemption } from "./modules/redemption/cancel-redemption";
+export { createRedemption } from "./modules/redemption/create-redemption";
+export { getSellerRedemptions } from "./modules/redemption/get-seller-redemption";
+export { getUserRedemptions } from "./modules/redemption/get-user-redemption";
+export { processRedemption } from "./modules/redemption/process-redemption";
+export { redemptionAnalytics } from "./modules/redemption/redemption-analytics";
 export { testConnection } from "./modules/test";

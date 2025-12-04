@@ -42,3 +42,43 @@ export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2
 export const generateQRId = (): string => {
     return crypto.randomBytes(12).toString('hex');
 };
+
+// utils/qr-helper.ts - Add these functions
+
+export function generateRedemptionId(): string {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substring(2, 8);
+    return `RED_${timestamp}_${random}`.toUpperCase();
+}
+
+export function isRedemptionQR(data: string): boolean {
+    try {
+        const parsed = JSON.parse(data);
+        return parsed.type === "redemption";
+    } catch {
+        return false;
+    }
+}
+
+export function parseRedemptionQR(data: string): {
+    type: string;
+    redemption_id: string;
+    seller_id: string;
+    user_id: string;
+    points: number;
+    timestamp: number;
+    hash: string;
+} | null {
+    try {
+        const parsed = JSON.parse(data);
+        if (parsed.type === "redemption" &&
+            parsed.redemption_id &&
+            parsed.seller_id &&
+            parsed.user_id) {
+            return parsed;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}

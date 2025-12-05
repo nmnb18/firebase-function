@@ -117,16 +117,14 @@ export const registerUser = functions.https.onRequest(async (req, res) => {
                     email,
                     phone,
                 },
-
-                address: {
-                    street,
-                    city,
-                    state,
-                    pincode,
-                    country,
-                },
-
                 location: {
+                    address: {
+                        street,
+                        city,
+                        state,
+                        pincode,
+                        country,
+                    },
                     lat,
                     lng,
                 },

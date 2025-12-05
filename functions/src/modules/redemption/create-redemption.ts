@@ -1,7 +1,7 @@
 import * as functions from "firebase-functions";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import { generateQRBase64, generateRedemptionId } from "../../utils/qr-helper";
+import { generateQRBase64, generateQRId, generateRedemptionId } from "../../utils/qr-helper";
 import cors from "cors";
 
 const corsHandler = cors({ origin: true });
@@ -67,7 +67,7 @@ export const createRedemption = functions.https.onRequest(async (req, res) => {
                 user_id: currentUser.uid,
                 points: points,
                 timestamp: Date.now(),
-                hash: generateSecurityHash(redemptionId, currentUser.uid, seller_id)
+                hash: generateQRId()
             });
 
             // 7. Generate QR image
@@ -127,11 +127,3 @@ export const createRedemption = functions.https.onRequest(async (req, res) => {
         }
     });
 });
-
-// Helper function for security hash
-function generateSecurityHash(redemptionId: string, userId: string, sellerId: string): string {
-    const secret = functions.config().redemption.secret || "default_secret";
-    const data = `${redemptionId}:${userId}:${sellerId}:${secret}`;
-    // Use crypto or simple hash for now
-    return Buffer.from(data).toString('base64').slice(0, 16);
-}

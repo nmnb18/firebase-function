@@ -25,10 +25,41 @@ export const getPointsBalance = functions.https.onRequest(async (req, res) => {
                 return res.status(200).json([]);
             }
 
+            const pointsHoldSnapshot = await db.collection("points_hold")
+                .where("user_id", "==", currentUser.uid)
+                .get();
+
+            // Calculate total points held/reserved
+            let totalPointsHeld = 0;
+            pointsHoldSnapshot.forEach(doc => {
+                const holdData = doc.data();
+                // Parse points as number (they're stored as string in your example)
+                const points = parseInt(holdData.points) || 0;
+                totalPointsHeld += points;
+            });
+
+            const redemptionsSnapshot = await db.collection("redemptions")
+                .where("user_id", "==", currentUser.uid)
+                .get();
+            let pointsWaitingRedeem = 0;
+            let totalPointsRedeemed = 0;
+            redemptionsSnapshot.forEach(doc => {
+                const redemptionData = doc.data();
+                // Parse points as number (they're stored as string in your example)
+                if (redemptionData.status === 'pending') {
+                    const points = parseInt(redemptionData.points) || 0;
+                    pointsWaitingRedeem += points;
+                } else {
+                    const points = parseInt(redemptionData.points) || 0;
+                    totalPointsRedeemed += points;
+                }
+
+            });
+            let totalPointsEarned = 0;
             const balancePromises = pointsSnapshot.docs.map(async (pointDoc) => {
                 const pointData = pointDoc.data();
                 const sellerId = pointData.seller_id;
-
+                totalPointsEarned += pointData.points || 0;
                 // Get seller details
                 const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
                 const sellerData = sellerDoc.exists ? sellerDoc.data() : null;
@@ -61,13 +92,22 @@ export const getPointsBalance = functions.https.onRequest(async (req, res) => {
                     reward_type: rewardConfig.reward_type || 'default'
                 };
             });
-
+            let availablePoints = totalPointsEarned - totalPointsRedeemed;
+            availablePoints = availablePoints - pointsWaitingRedeem;
             const balances = await Promise.all(balancePromises);
 
             // Sort by points descending
             balances.sort((a, b) => b.points - a.points);
 
-            return res.status(200).json(balances);
+            return res.status(200).json({
+                balances,
+                stats: {
+                    available_points: availablePoints,
+                    total_points_earned: totalPointsEarned,
+                    points_wating_redeem: pointsWaitingRedeem,
+                    total_points_redeem: totalPointsRedeemed
+                }
+            });
 
         } catch (error: any) {
             console.error("Get balance error:", error);

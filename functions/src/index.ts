@@ -2,7 +2,7 @@ export { registerSeller } from "./modules/auth/registerSeller";
 export { loginSeller } from "./modules/auth/loginSeller";
 export { getSellerDetails } from "./modules/seller/get-seller-details";
 export { updateSellerProfile } from "./modules/seller/update-seller";
-export { logoutSeller } from './modules/auth/logoutSeller';
+export { logout } from './modules/auth/logout';
 export { generateBatchQRCodes } from './modules/qr-code/generate-batch';
 export { scanQRCode } from './modules/qr-code/scan-qr';
 export { generateQRCode } from './modules/qr-code/generate-qr';
@@ -35,4 +35,8 @@ export { getSellerRedemptions } from "./modules/redemption/get-seller-redemption
 export { getUserRedemptions } from "./modules/redemption/get-user-redemption";
 export { processRedemption } from "./modules/redemption/process-redemption";
 export { redemptionAnalytics } from "./modules/redemption/redemption-analytics";
+export { getRedemptionQR } from "./modules/redemption/get-redemption-qr";
+export { getBalanceBySeller } from "./modules/points/get-balance-by-seller";
+export { deleteUser } from "./modules/auth/deleteUser";
+export { updateUserProfile } from "./modules/user/update-user";
 export { testConnection } from "./modules/test";

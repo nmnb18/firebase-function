@@ -74,7 +74,6 @@ export const generateBatchQRCodes = functions.https.onRequest(async (req, res) =
                     qr_code_base64: qrBase64,
                     qr_type: 'static_hidden',
                     expires_at: null,
-                    hidden_code: hiddenCode
                 });
             }
 

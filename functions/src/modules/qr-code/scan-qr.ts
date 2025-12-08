@@ -112,7 +112,6 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
 
             const {
                 qr_id,
-                hidden_code,
                 user_lat,
                 user_lng,
             } = req.body as QRCodeScanRequest;
@@ -153,7 +152,7 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
             const newCustomer = await isNewCustomer(currentUser.uid, sellerId);
 
             // Calculate points based on QR type
-            const pointsValue = qrType === 'static'
+            const pointsValue = qrType === 'static' || qrType === 'multiple'
                 ? qrData.points_value
                 : calculateRewardPoints(qrData.amount, seller);
 
@@ -176,66 +175,37 @@ export const scanQRCode = functions.https.onRequest(async (req, res) => {
                 });
             }
 
-            // ------------------------------
-            // Static QR (once per day)
-            // ------------------------------
-            if (qrType === "static") {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-                // Location check
-                if (seller?.location.lat && seller.location.lng) {
-                    if (!user_lat || !user_lng) {
-                        return res.status(400).json({ error: "Location is required" });
-                    }
-
-                    const distance = calculateDistance(
-                        seller.location_lat,
-                        seller.location_lng,
-                        user_lat,
-                        user_lng
-                    );
-
-                    const maxDistance = seller.location_radius_meters || 100;
-
-                    if (distance > maxDistance) {
-                        return res.status(400).json({
-                            error: `Too far from store. Must be within ${maxDistance}m`
-                        });
-                    }
+            // Location check
+            if (seller?.location.lat && seller.location.lng) {
+                if (!user_lat || !user_lng) {
+                    return res.status(400).json({ error: "Location is required" });
                 }
 
-                await db.collection("daily_scans").add({
-                    user_id: currentUser.uid,
-                    seller_id: sellerId,
-                    qr_id,
-                    scan_date: today,
-                    scanned_at: new Date()
-                });
+                const distance = calculateDistance(
+                    seller.location_lat,
+                    seller.location_lng,
+                    user_lat,
+                    user_lng
+                );
+
+                const maxDistance = seller.location_radius_meters || 100;
+
+                if (distance > maxDistance) {
+                    return res.status(400).json({
+                        error: `Too far from store. Must be within ${maxDistance}m`
+                    });
+                }
             }
-
-            // ------------------------------
-            // Static Hidden QR
-            // ------------------------------
-            if (qrType === "static_hidden") {
-                if (!hidden_code) {
-                    return res.status(400).json({ error: "Hidden code required" });
-                }
-
-                if (qrData.used) {
-                    return res.status(400).json({ error: "This code has already been used" });
-                }
-
-                if (hidden_code !== qrData.hidden_code) {
-                    return res.status(400).json({ error: "Invalid hidden code" });
-                }
-
-                await qrDoc.ref.update({
-                    used: true,
-                    used_by: currentUser.uid,
-                    used_at: new Date()
-                });
-            }
+            await db.collection("daily_scans").add({
+                user_id: currentUser.uid,
+                seller_id: sellerId,
+                qr_id,
+                scan_date: today,
+                scanned_at: new Date()
+            });
 
             // =====================================================
             // Allocate points for QR scan

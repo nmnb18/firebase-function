@@ -5,6 +5,7 @@ export interface QRCodeGenerateRequest {
     expires_in_minutes?: number;
     batch_size?: number;
     qr_code_type?: string
+    points?: number;
 }
 
 export interface QRCodeScanRequest {
@@ -21,7 +22,7 @@ export interface QRCodeResponse {
     qr_code_base64: string;
     qr_type: string;
     expires_at?: adminRef.firestore.Timestamp | Date | null;
-    hidden_code?: string | null;
+    points?: number | null;
 }
 
 export interface QRCodeBatchResponse {

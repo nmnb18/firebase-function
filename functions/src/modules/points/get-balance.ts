@@ -92,8 +92,7 @@ export const getPointsBalance = functions.https.onRequest(async (req, res) => {
                     reward_type: rewardConfig.reward_type || 'default'
                 };
             });
-            let availablePoints = totalPointsEarned - totalPointsRedeemed;
-            availablePoints = availablePoints - pointsWaitingRedeem;
+            let availablePoints = totalPointsEarned - totalPointsHeld;
             const balances = await Promise.all(balancePromises);
 
             // Sort by points descending

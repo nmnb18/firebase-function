@@ -90,6 +90,8 @@ export const getNearbySellers = functions.https.onRequest((req, res) => {
                         description: s.business?.description,
                         points_per_visit: s.rewards?.default_points_value || 1,
                         reward_points: s.stats?.total_points_distributed || 0,
+                        logo: s.media?.logo_url || '',
+                        banner: s.media?.banner_url || '',
                         reward_description: getRewardDescription(s.rewards),
                         lat: sLat,
                         lng: sLng,

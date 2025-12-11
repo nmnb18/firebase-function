@@ -28,8 +28,7 @@ function autoGenerateOfferIds(offers: any[], sellerId: string): any[] {
             ...offer,
             status: 'active',
             reward_id: generateOfferId(sellerId, index + 1),
-            created_at: adminRef.firestore.FieldValue.serverTimestamp(),
-            updated_at: adminRef.firestore.FieldValue.serverTimestamp()
+            created_at: new Date(),
         };
     });
 }
@@ -105,27 +104,25 @@ export const updateSellerProfile = functions.https.onRequest(async (req, res) =>
                 const existingRewards = sellerProfile.rewards || {};
                 const existingOffers = existingRewards.offers || [];
 
-                // Check if we're updating offers
+                let updatedRewards = { ...existingRewards };
+
+                // ✅ If offers are being updated
                 if (data.offers) {
                     const preparedOffers = prepareOffersData(data.offers, existingOffers, sellerId);
-                    updatePayload["rewards.offers"] = preparedOffers;
-
-                    // Remove offers from data to avoid duplication
-                    const { offers, ...otherRewardData } = data;
-                    if (Object.keys(otherRewardData).length > 0) {
-                        updatePayload["rewards"] = {
-                            ...existingRewards,
-                            ...otherRewardData
-                        };
-                    }
-                } else {
-                    // Update other reward fields
-                    updatePayload["rewards"] = {
-                        ...existingRewards,
-                        ...data
-                    };
+                    updatedRewards.offers = preparedOffers;
                 }
-            } else {
+
+                // ✅ Merge remaining reward fields safely (no duplication)
+                const { offers, ...otherRewardData } = data;
+                updatedRewards = {
+                    ...updatedRewards,
+                    ...otherRewardData
+                };
+
+                // ✅ ONLY update rewards once
+                updatePayload["rewards"] = updatedRewards;
+            }
+            else {
                 // For other sections, merge with existing data
                 updatePayload[section] = {
                     ...sellerProfile[section],

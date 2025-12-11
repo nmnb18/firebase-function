@@ -15,7 +15,7 @@ export const getSellerRedemptions = functions.https.onRequest(async (req, res) =
             const sellerUser = await authenticateUser(req.headers.authorization);
 
             // Get query parameters
-            const { status, limit = 20, offset = 0 } = req.query;
+            const { status, limit = 50, offset = 0 } = req.query;
 
             // Build query
             let query: any = db.collection("redemptions")

@@ -40,4 +40,4 @@ export { getBalanceBySeller } from "./modules/points/get-balance-by-seller";
 export { deleteUser } from "./modules/auth/deleteUser";
 export { updateUserProfile } from "./modules/user/update-user";
 export { updateSellerMedia } from "./modules/seller/update-seller-media";
-export { testConnection } from "./modules/test";
+export { getRedemptionStatus } from "./modules/redemption/redemption-status";

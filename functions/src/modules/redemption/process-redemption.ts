@@ -55,7 +55,7 @@ export const processRedemption = functions.https.onRequest(async (req, res) => {
                 const pointsDoc = pointsQuery.docs[0];
                 const currentPoints = pointsDoc.data().points || 0;
 
-                if (currentPoints < redemption.points) {
+                if (currentPoints < Number(redemption.points)) {
                     // User doesn't have enough points (shouldn't happen with point holds)
                     await redemptionRef.update({
                         status: "cancelled",
@@ -73,7 +73,7 @@ export const processRedemption = functions.https.onRequest(async (req, res) => {
                 }
 
                 // Deduct points
-                const newPoints = currentPoints - redemption.points;
+                const newPoints = currentPoints - Number(redemption.points);
                 await pointsDoc.ref.update({
                     points: newPoints,
                     last_updated: adminRef.firestore.FieldValue.serverTimestamp()
@@ -96,7 +96,7 @@ export const processRedemption = functions.https.onRequest(async (req, res) => {
                 user_id: redemption.user_id,
                 seller_id: redemption.seller_id,
                 seller_name: redemption.seller_shop_name,
-                points: -redemption.points, // Negative for redemption
+                points: -Number(redemption.points), // Negative for redemption
                 transaction_type: "redeem",
                 redemption_id: redemption_id,
                 timestamp: adminRef.firestore.FieldValue.serverTimestamp(),
@@ -106,7 +106,7 @@ export const processRedemption = functions.https.onRequest(async (req, res) => {
             // 7. Update seller stats
             const sellerRef = db.collection("seller_profiles").doc(redemption.seller_id);
             await sellerRef.update({
-                "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(redemption.points),
+                "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(Number(redemption.points)),
                 "stats.total_redemptions": adminRef.firestore.FieldValue.increment(1)
             });
 
@@ -118,7 +118,7 @@ export const processRedemption = functions.https.onRequest(async (req, res) => {
                 success: true,
                 message: "Redemption processed successfully",
                 redemption_id: redemption_id,
-                points_redeemed: redemption.points,
+                points_redeemed: Number(redemption.points),
                 user_name: redemption.user_name,
                 timestamp: new Date().toISOString()
             });

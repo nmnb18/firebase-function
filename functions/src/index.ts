@@ -41,3 +41,6 @@ export { deleteUser } from "./modules/auth/deleteUser";
 export { updateUserProfile } from "./modules/user/update-user";
 export { updateSellerMedia } from "./modules/seller/update-seller-media";
 export { getRedemptionStatus } from "./modules/redemption/redemption-status";
+export { getSellerOffers } from "./modules/seller/get-seller-offers";
+export { saveSellerOffer } from "./modules/seller/save-seller-offer";
+export { deleteSellerOffer } from "./modules/seller/delete-seller-offer";

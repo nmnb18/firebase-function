@@ -16,7 +16,7 @@ export const deleteSellerOffer = functions.https.onRequest((req, res) => {
             if (!currentUser?.uid)
                 return res.status(401).json({ error: "Unauthorized" });
 
-            const { date } = req.body;
+            const { date } = req.query;
             const seller_id = currentUser.uid;
 
             if (!date)

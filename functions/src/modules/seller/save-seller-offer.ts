@@ -51,6 +51,7 @@ export const saveSellerOffer = functions.https.onRequest((req, res) => {
                     offers: formattedOffers,
                     updated_at: new Date(),
                     created_at: new Date(),
+                    status: 'Pending'
                 },
                 { merge: true }
             );

@@ -5,7 +5,7 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getSellerOffers = functions.https.onRequest((req, res) => {
+export const getSellerOfferById = functions.https.onRequest((req, res) => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "GET")
@@ -15,31 +15,13 @@ export const getSellerOffers = functions.https.onRequest((req, res) => {
             if (!currentUser?.uid)
                 return res.status(401).json({ error: "Unauthorized" });
 
-            const seller_id = currentUser.uid;
+            const { seller_id } = req.query;
             const today = new Date().toISOString().slice(0, 10);
-
-            const requestedDate = req.query.date as string | undefined;
-
-            // -----------------------------------------------------
-            // 1️⃣ MODE A: Fetch a single day's offer (used for EDIT)
-            // -----------------------------------------------------
-            if (requestedDate) {
-                const docId = `${seller_id}_${requestedDate}`;
-                const doc = await db.collection("seller_daily_offers").doc(docId).get();
-
-                if (!doc.exists)
-                    return res.status(404).json({ error: "Offer not found for date" });
-
-                return res.status(200).json({
-                    success: true,
-                    offer: { id: doc.id, ...doc.data() },
-                });
-            }
 
             // -----------------------------------------------------
             // 2️⃣ MODE B: Fetch grouped offers
             // -----------------------------------------------------
-            console.log(today)
+            console.log(today, seller_id)
             const activePromise = db
                 .collection("seller_daily_offers")
                 .where("seller_id", "==", seller_id)

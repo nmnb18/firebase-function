@@ -69,6 +69,26 @@ export const getNearbySellers = functions.https.onRequest((req, res) => {
 
             const nearbySellers: any[] = [];
 
+            const today = new Date().toISOString().slice(0, 10);
+
+            // Fetch all sellers who have offers today
+            const todayOffersSnap = await db
+                .collection("seller_daily_offers")
+                .where("date", "==", today)
+                .where("status", "==", "Active")
+                .get();
+
+            // Build lookup set
+            const perksSellerSet = new Set<string>();
+
+            todayOffersSnap.forEach(doc => {
+                const data = doc.data();
+                if (data?.seller_id && Array.isArray(data?.offers) && data.offers.length > 0) {
+                    perksSellerSet.add(data.seller_id);
+                }
+            });
+
+
             sellerDocs.forEach((doc) => {
                 const s = doc.data();
 
@@ -79,23 +99,26 @@ export const getNearbySellers = functions.https.onRequest((req, res) => {
 
                 // Calculate distance
                 const distanceKm = getDistanceKm(userLat!, userLng!, sLat, sLng);
-
+                const sellerId = s.user_id;
                 // Only include within 1 km radius
                 if (distanceKm <= 1) {
                     nearbySellers.push({
-                        id: s.user_id,
+                        id: sellerId,
                         shop_name: s.business?.shop_name,
                         category: s.business?.category,
                         business_type: s.business?.business_type,
                         description: s.business?.description,
                         points_per_visit: s.rewards?.default_points_value || 1,
                         reward_points: s.stats?.total_points_distributed || 0,
+                        address: `${s.location.address.street}, ${s.location.address.city} - ${s.location.address.pincode}`,
+                        phone: s.account.phone,
                         logo: s.media?.logo_url || '',
                         banner: s.media?.banner_url || '',
                         reward_description: getRewardDescription(s.rewards),
                         lat: sLat,
                         lng: sLng,
                         distance_km: Number(distanceKm.toFixed(3)),
+                        perksAvailable: perksSellerSet.has(sellerId),
                     });
                 }
             });
@@ -103,7 +126,13 @@ export const getNearbySellers = functions.https.onRequest((req, res) => {
             // ---------------------------------------------------
             // 4️⃣ Sort nearest first
             // ---------------------------------------------------
-            nearbySellers.sort((a, b) => a.distance_km - b.distance_km);
+            nearbySellers.sort((a, b) => {
+                if (a.perksAvailable === b.perksAvailable) {
+                    return a.distance_km - b.distance_km;
+                }
+                return a.perksAvailable ? -1 : 1;
+            });
+
 
             return res.status(200).json({
                 success: true,

@@ -47,11 +47,21 @@ const generateInternalOrderId = async () => {
     return `GBT-${padded}`;
 }
 
+const generateRedeemCode = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let result = "";
+    for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `RED-GRAB-${result}`;
+}
+
 export {
     sendWelcomeEmail,
     getSubscriptionFeatures,
     getMonthlyQRLimit,
     getSubscriptionEndDate,
     getSubscriptionPrice,
-    generateInternalOrderId
+    generateInternalOrderId,
+    generateRedeemCode
 }

@@ -4,8 +4,8 @@ import admin from "firebase-admin";
 
 export const expireUnredeemedOffers = onSchedule(
     {
-        //schedule: "5 0 * * *", // 12:05 AM daily
-        schedule: "0 7 * * *",
+        schedule: "5 0 * * *", // 12:05 AM daily
+        //schedule: "0 7 * * *",
         timeZone: "Asia/Kolkata",
     },
     async () => {

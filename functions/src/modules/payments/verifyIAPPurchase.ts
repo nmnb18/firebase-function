@@ -105,14 +105,45 @@ export const verifyIAPPurchase = functions.https.onRequest(
                     });
                 }
 
+
+
+
+                // 🔒 Prevent duplicate processing (restore / replay safety)
+                const existingTx = await db
+                    .collection("subscription_history")
+                    .doc(currentUser.uid)
+                    .collection("records")
+                    .where("transaction_id", "==", transactionId)
+                    .limit(1)
+                    .get();
+
+                if (!existingTx.empty) {
+                    // Transaction already processed — safe to return success
+                    return res.status(200).json({
+                        success: true,
+                        message: "Purchase already restored",
+                    });
+                }
+
                 // Compute expiry date
-                const now = new Date();
+                const sellerRef = db.collection("seller_profiles").doc(currentUser.uid);
+                const sellerSnap = await sellerRef.get();
+
+                const currentExpiry =
+                    sellerSnap.exists &&
+                    sellerSnap.data()?.subscription?.expires_at?.toDate?.();
+
+                const baseDate =
+                    currentExpiry && currentExpiry > new Date()
+                        ? currentExpiry
+                        : new Date();
+
                 const expires_at = new Date(
-                    now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
+                    baseDate.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
                 );
 
                 // Write subscription to Firestore
-                await db.collection("seller_profiles").doc(currentUser.uid).update({
+                await sellerRef.update({
                     subscription: {
                         tier: productId,
                         expires_at: adminRef.firestore.Timestamp.fromDate(expires_at),

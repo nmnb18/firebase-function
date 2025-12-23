@@ -1,15 +1,14 @@
-// firebase-functions/src/subscriptions/verifyIAPPurchase.ts
 import * as functions from "firebase-functions";
+import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import axios from "axios";
-import cors from "cors";
+
 const corsHandler = cors({ origin: true });
 
 const PLAN_CONFIG = {
     seller_pro_30d: {
         id: "seller_pro_30d",
-        name: "Seller Pro 30 Days",
+        name: "pro",
         price: 0, // Apple controls the price — DO NOT store price here
         durationDays: 30,
         monthly_qr_limit: 9999, // your choice
@@ -17,171 +16,184 @@ const PLAN_CONFIG = {
 
     seller_premium_1yr: {
         id: "seller_premium_1yr",
-        name: "Seller Premium 1 Year",
+        name: "premium",
         price: 0, // Apple controls pricing
         durationDays: 365,
         monthly_qr_limit: 99999, // unlimited or high number
     },
 } as const;
 
+/**
+ * Decode Apple on-device JWS (purchaseToken)
+ * NOTE: Pre-launch safe (no crypto verification yet)
+ */
+function decodeApplePurchaseToken(jws: string) {
+    const parts = jws.split(".");
+    if (parts.length !== 3) {
+        throw new Error("Invalid Apple JWS format");
+    }
+
+    return JSON.parse(
+        Buffer.from(parts[1], "base64").toString("utf8")
+    );
+}
+
 export const verifyIAPPurchase = functions.https.onRequest(
-    { secrets: ["APPLE_SHARED_SECRET"] },
     async (req, res) => {
         corsHandler(req, res, async () => {
             try {
-                res.set("Access-Control-Allow-Origin", "*");
-                res.set("Access-Control-Allow-Methods", "POST");
-                res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-                if (req.method === "OPTIONS") return res.status(200).send("OK");
                 if (req.method !== "POST") {
-                    return res.status(405).json({ error: "Method not allowed" });
+                    return res.status(405).json({ error: "Only POST allowed" });
                 }
 
-                const currentUser = await authenticateUser(req.headers.authorization);
+                const currentUser = await authenticateUser(
+                    req.headers.authorization
+                );
                 if (!currentUser?.uid) {
                     return res.status(401).json({ error: "Unauthorized" });
                 }
 
-                const { receiptData, productId, transactionId } = req.body;
+                const { purchaseToken, productId, transactionId } = req.body;
 
-                if (!receiptData || !productId || !transactionId) {
-                    return res.status(400).json({ error: "Missing fields" });
+                if (!purchaseToken || !productId || !transactionId) {
+                    return res.status(400).json({
+                        error: "Missing purchaseToken, productId, or transactionId",
+                    });
                 }
-                // Make sure productId is valid
+
                 const plan = PLAN_CONFIG[productId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
-                    return res.status(400).json({ error: "Invalid productId" });
+                    return res.status(400).json({ error: "Invalid plan" });
                 }
 
-                // Apple endpoints
-                const APPLE_VERIFY_URL_PROD = "https://buy.itunes.apple.com/verifyReceipt";
-                const APPLE_VERIFY_URL_SANDBOX = "https://sandbox.itunes.apple.com/verifyReceipt";
+                // 🔓 Decode Apple payload
+                const payload = decodeApplePurchaseToken(purchaseToken);
 
-                // Build request
-                const payload = {
-                    "receipt-data": receiptData,
-                    password: process.env.APPLE_SHARED_SECRET,
-                    'exclude-old-transactions': true,
-                };
-
-                /**
-                    * Step 1: Try Apple PROD
-                */
-                let appleResponse = await axios.post(APPLE_VERIFY_URL_PROD, payload, {
-                    headers: { "Content-Type": "application/json" },
-                });
-
-                // If receipt is from sandbox, Apple returns status 21007 → retry with sandbox URL
-                if (appleResponse.data?.status === 21007) {
-                    appleResponse = await axios.post(APPLE_VERIFY_URL_SANDBOX, payload, {
-                        headers: { "Content-Type": "application/json" },
-                    });
+                // ✅ Validate core fields
+                if (payload.productId !== productId) {
+                    throw new Error("Product mismatch");
                 }
 
-                const data = appleResponse.data;
-
-                if (!data || data.status !== 0) {
-                    return res.status(400).json({
-                        success: false,
-                        error: "Invalid receipt",
-                        status: data.status,
-                    });
+                if (payload.transactionId !== transactionId) {
+                    throw new Error("Transaction mismatch");
                 }
 
-                /**
-                * Step 2: Extract in_app purchase
-                */
-                const inAppList = data?.receipt?.in_app || [];
-                const matched = inAppList.find((p: any) =>
-                    p.product_id === productId &&
-                    p.transaction_id === transactionId
-                );
-
-                if (!matched) {
-                    return res.status(400).json({
-                        success: false,
-                        error: "Receipt does not match purchase",
-                    });
+                if (!payload.expiresDate) {
+                    throw new Error("Missing expiry in Apple payload");
                 }
+                const now = new Date();
+                const expiresAt = new Date(
+                    now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
+                );;
+                const originalTransactionId = payload.originalTransactionId;
+                const environment = payload.environment; // Sandbox / Production
 
+                const sellerId = currentUser.uid;
 
-
-
-                // 🔒 Prevent duplicate processing (restore / replay safety)
-                const existingTx = await db
+                // 🔒 Prevent duplicate processing
+                const historyRef = db
                     .collection("subscription_history")
-                    .doc(currentUser.uid)
-                    .collection("records")
-                    .where("transaction_id", "==", transactionId)
+                    .doc(sellerId)
+                    .collection("records");
+
+                const existing = await historyRef
+                    .where(
+                        "original_transaction_id",
+                        "==",
+                        originalTransactionId
+                    )
                     .limit(1)
                     .get();
 
-                if (!existingTx.empty) {
-                    // Transaction already processed — safe to return success
+                if (!existing.empty) {
                     return res.status(200).json({
                         success: true,
-                        message: "Purchase already restored",
+                        message: "Subscription already processed",
                     });
                 }
 
-                // Compute expiry date
-                const sellerRef = db.collection("seller_profiles").doc(currentUser.uid);
-                const sellerSnap = await sellerRef.get();
-
-                const currentExpiry =
-                    sellerSnap.exists &&
-                    sellerSnap.data()?.subscription?.expires_at?.toDate?.();
-
-                const baseDate =
-                    currentExpiry && currentExpiry > new Date()
-                        ? currentExpiry
-                        : new Date();
-
-                const expires_at = new Date(
-                    baseDate.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
-                );
-
-                // Write subscription to Firestore
-                await sellerRef.update({
+                /**
+                 * 1️⃣ Update seller_profiles (same as Razorpay)
+                 */
+                await db.collection("seller_profiles").doc(sellerId).update({
                     subscription: {
-                        tier: productId,
-                        expires_at: adminRef.firestore.Timestamp.fromDate(expires_at),
+                        tier: plan.name,
+                        expires_at: adminRef.firestore.Timestamp.fromDate(
+                            expiresAt
+                        ),
                         qr_limit: plan.monthly_qr_limit,
-                        updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                        updated_at:
+                            adminRef.firestore.FieldValue.serverTimestamp(),
                         last_payment: {
+                            store: "apple",
                             product_id: productId,
                             transaction_id: transactionId,
-                            environment: data["environment"], // Sandbox or Production
-                            paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                            original_transaction_id: originalTransactionId,
+                            environment,
+                            paid_at:
+                                adminRef.firestore.FieldValue.serverTimestamp(),
                         },
-                    }
+                    },
                 });
 
-                // Log history
-                await db.collection("subscription_history")
-                    .doc(currentUser.uid)
-                    .collection("records")
-                    .add({
-                        product_id: productId,
-                        transaction_id: transactionId,
-                        environment: data["environment"],
-                        paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
-                        expires_at: adminRef.firestore.Timestamp.fromDate(expires_at),
-                    });
+                /**
+                 * 2️⃣ Update seller_subscriptions (mirror Razorpay)
+                 */
+                await db.collection("seller_subscriptions").doc(sellerId).set(
+                    {
+                        tier: plan.name,
+                        status: "active",
+                        price: null, // Apple controls pricing
+                        original_price: null,
+                        monthly_qr_limit: plan.monthly_qr_limit,
+                        current_period_start:
+                            adminRef.firestore.FieldValue.serverTimestamp(),
+                        current_period_end:
+                            adminRef.firestore.Timestamp.fromDate(expiresAt),
+                        store: "apple",
+                        updated_at:
+                            adminRef.firestore.FieldValue.serverTimestamp(),
+                    },
+                    { merge: true }
+                );
+
+                /**
+                 * 3️⃣ Insert subscription_history record
+                 */
+                await historyRef.add({
+                    store: "apple",
+                    product_id: productId,
+                    transaction_id: transactionId,
+                    original_transaction_id: originalTransactionId,
+                    plan_id: productId,
+                    seller_id: sellerId,
+                    amount: null,
+                    original_amount: null,
+                    environment,
+                    status: "paid",
+                    paid_at:
+                        adminRef.firestore.FieldValue.serverTimestamp(),
+                    expires_at:
+                        adminRef.firestore.Timestamp.fromDate(expiresAt),
+                });
 
                 return res.status(200).json({
                     success: true,
-                    message: "Purchase validated",
+                    message: "Apple subscription verified",
                     subscription: {
-                        plan: productId,
-                        expires_at: expires_at.toISOString(),
-                    }
+                        order_id: transactionId,
+                        plan: plan.name,
+                        expires_at: expiresAt.toISOString(),
+                        monthly_qr_limit: plan.monthly_qr_limit,
+                    },
                 });
             } catch (error: any) {
-                console.error("Verify IAP Error:", error?.message || error);
-                return res.status(500).json({ error: error.message });
+                console.error("verifyIAPPurchase error:", error);
+                return res.status(500).json({
+                    success: false,
+                    error: error.message || "Verification failed",
+                });
             }
-        })
+        });
     }
 );

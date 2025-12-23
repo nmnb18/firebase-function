@@ -53,3 +53,4 @@ export { verifyRedeemCode } from "./modules/redemption/verify-redeem-code";
 export { expireUnredeemedOffers } from "./modules/cron/expire-unredeemed-offers";
 export { getSellerRedeemedPerks } from "./modules/seller/get-seller-perks";
 export { phoneLogin } from "./modules/auth/phoneLogin";
+export { verifyIAPPurchase } from "./modules/payments/verifyIAPPurchase";

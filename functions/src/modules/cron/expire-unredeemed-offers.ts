@@ -7,6 +7,7 @@ export const expireUnredeemedOffers = onSchedule(
         schedule: "5 0 * * *", // 12:05 AM daily
         //schedule: "0 7 * * *",
         timeZone: "Asia/Kolkata",
+        region: "asia-south1",
     },
     async () => {
         try {

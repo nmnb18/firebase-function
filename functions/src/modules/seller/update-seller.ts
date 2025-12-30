@@ -48,7 +48,7 @@ function prepareOffersData(offersData: any, existingOffers: any[], sellerId: str
     return existingOffers;
 }
 
-export const updateSellerProfile = functions.https.onRequest(async (req, res) => {
+export const updateSellerProfile = functions.https.onRequest({ region: "asia-south1", }, async (req, res) => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "PATCH") {

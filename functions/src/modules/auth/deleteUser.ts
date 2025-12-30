@@ -4,18 +4,8 @@ import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 
 const corsHandler = cors({ origin: true });
-/**
- * DELETE ACCOUNT FUNCTION
- * Removes:
- * - Firebase Auth user
- * - seller_profiles/{id}
- * - seller_subscriptions/{id}
- * - qr_codes where seller_id = id
- * - scans where seller_id = id
- * - reward_history where seller_id = id
- */
-
 export const deleteUser = functions.https.onRequest(
+    { region: "asia-south1" },
     (req, res) => {
         corsHandler(req, res, async () => {
             try {
@@ -23,59 +13,49 @@ export const deleteUser = functions.https.onRequest(
                     return res.status(405).json({ error: "Only DELETE allowed" });
                 }
 
-                const currentUser = await authenticateUser(
-                    req.headers.authorization
-                );
-
-                if (!currentUser || !currentUser.uid) {
+                const currentUser = await authenticateUser(req.headers.authorization);
+                if (!currentUser?.uid) {
                     return res.status(401).json({ error: "Unauthorized" });
                 }
 
                 const userId = currentUser.uid;
+                const now = adminRef.firestore.FieldValue.serverTimestamp();
 
-                await db.collection("customer_profiles").doc(userId).delete();
+                // 1️⃣ Soft delete Firestore profile
+                await db.collection("users").doc(userId).update({
+                    deleted: true,
+                    deleted_at: now,
+                });
 
-                const dScanSnap = await db.collection("daily_scans")
-                    .where("user_id", "==", userId)
+                await db.collection("customer_profiles").doc(userId).update({
+                    deleted: true,
+                    deleted_at: now,
+                });
+
+                // 2️⃣ Disable future scans / actions (optional)
+                const qrSnap = await db.collection("qr_codes")
+                    .where("used_by", "==", userId)
                     .get();
 
-                dScanSnap.forEach(doc => doc.ref.delete());
+                const batch = db.batch();
+                qrSnap.forEach(doc => {
+                    batch.update(doc.ref, { disabled_for_user: true });
+                });
+                await batch.commit();
 
-                const pHSnap = await db.collection("points_hold")
-                    .where("user_id", "==", userId)
-                    .get();
-
-                pHSnap.forEach(doc => doc.ref.delete());
-
-                const pSnap = await db.collection("points")
-                    .where("user_id", "==", userId)
-                    .get();
-
-                pSnap.forEach(doc => doc.ref.delete());
-
-                // 5. Delete reward history
-                const rewardSnap = await db.collection("redemptions")
-                    .where("user_id", "==", userId)
-                    .get();
-
-                rewardSnap.forEach(doc => doc.ref.delete());
-
-                // 6. Delete auth user
+                // 3️⃣ Delete Firebase Auth user (final step)
                 await adminRef.auth().deleteUser(userId);
 
                 return res.status(200).json({
                     success: true,
-                    message: "Account deleted successfully",
+                    message: "User account deleted safely",
                 });
 
             } catch (err: any) {
-                console.error("Delete Account Error:", err);
-                return res.status(500).json({
-                    success: false,
-                    error: err.message || "Internal server error",
-                });
+                console.error("Delete User Error:", err);
+                return res.status(500).json({ success: false, error: err.message });
             }
         });
-
     }
 );
+

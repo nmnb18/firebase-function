@@ -100,173 +100,174 @@ function calculateRewardPoints(amount: number, seller: any): number {
 /** ----------------------------------------------------
  * MAIN SCAN LOGIC (QR-only, no payment logic)
  * ---------------------------------------------------- */
-export const scanQRCode = functions.https.onRequest(async (req, res) => {
-    corsHandler(req, res, async () => {
+export const scanQRCode = functions.https.onRequest(
+    { region: 'asia-south1' }, async (req, res) => {
+        corsHandler(req, res, async () => {
 
-        if (req.method !== "POST") {
-            return res.status(405).json({ error: "Method not allowed" });
-        }
-
-        try {
-            const currentUser = await authenticateUser(req.headers.authorization);
-
-            const {
-                qr_id,
-                user_lat,
-                user_lng,
-            } = req.body as QRCodeScanRequest;
-
-            if (!qr_id) {
-                return res.status(400).json({ error: "QR ID is required" });
+            if (req.method !== "POST") {
+                return res.status(405).json({ error: "Method not allowed" });
             }
 
-            // -----------------------------------
-            // Fetch QR Data
-            // -----------------------------------
-            const qrQuery = await db
-                .collection("qr_codes")
-                .where("qr_id", "==", qr_id)
-                .limit(1)
-                .get();
+            try {
+                const currentUser = await authenticateUser(req.headers.authorization);
 
-            if (qrQuery.empty) {
-                return res.status(404).json({ error: "Invalid QR code" });
-            }
-
-            const qrDoc = qrQuery.docs[0];
-            const qrData = qrDoc.data();
-
-            const qrType = qrData.qr_type || "dynamic";
-            const sellerId = qrData.seller_id;
-
-            // -----------------------------------
-            // Fetch Seller Profile
-            // -----------------------------------
-            const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
-            if (!sellerDoc.exists) {
-                return res.status(404).json({ error: "Seller not found" });
-            }
-            const seller = sellerDoc.data();
-
-            // Check if this is a new customer
-            const newCustomer = await isNewCustomer(currentUser.uid, sellerId);
-
-            // Calculate points based on QR type
-            const pointsValue = qrType === 'static' || qrType === 'multiple'
-                ? qrData.points_value
-                : calculateRewardPoints(qrData.amount, seller);
-
-            // ------------------------------
-            // Dynamic QR (one-time use)
-            // ------------------------------
-            if (qrType === "dynamic") {
-                if (qrData.used) {
-                    return res.status(400).json({ error: "QR code already used" });
-                }
-
-                if (qrData.expires_at && qrData.expires_at.toDate() < new Date()) {
-                    return res.status(400).json({ error: "QR code expired" });
-                }
-
-                await qrDoc.ref.update({
-                    used: true,
-                    used_by: currentUser.uid,
-                    used_at: new Date()
-                });
-            }
-
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            // Location check
-            if (seller?.location.lat && seller.location.lng) {
-                if (!user_lat || !user_lng) {
-                    return res.status(400).json({ error: "Location is required" });
-                }
-
-                const distance = calculateDistance(
-                    seller.location_lat,
-                    seller.location_lng,
+                const {
+                    qr_id,
                     user_lat,
-                    user_lng
-                );
+                    user_lng,
+                } = req.body as QRCodeScanRequest;
 
-                const maxDistance = seller.location_radius_meters || 100;
+                if (!qr_id) {
+                    return res.status(400).json({ error: "QR ID is required" });
+                }
 
-                if (distance > maxDistance) {
-                    return res.status(400).json({
-                        error: `Too far from store. Must be within ${maxDistance}m`
+                // -----------------------------------
+                // Fetch QR Data
+                // -----------------------------------
+                const qrQuery = await db
+                    .collection("qr_codes")
+                    .where("qr_id", "==", qr_id)
+                    .limit(1)
+                    .get();
+
+                if (qrQuery.empty) {
+                    return res.status(404).json({ error: "Invalid QR code" });
+                }
+
+                const qrDoc = qrQuery.docs[0];
+                const qrData = qrDoc.data();
+
+                const qrType = qrData.qr_type || "dynamic";
+                const sellerId = qrData.seller_id;
+
+                // -----------------------------------
+                // Fetch Seller Profile
+                // -----------------------------------
+                const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
+                if (!sellerDoc.exists) {
+                    return res.status(404).json({ error: "Seller not found" });
+                }
+                const seller = sellerDoc.data();
+
+                // Check if this is a new customer
+                const newCustomer = await isNewCustomer(currentUser.uid, sellerId);
+
+                // Calculate points based on QR type
+                const pointsValue = qrType === 'static' || qrType === 'multiple'
+                    ? qrData.points_value
+                    : calculateRewardPoints(qrData.amount, seller);
+
+                // ------------------------------
+                // Dynamic QR (one-time use)
+                // ------------------------------
+                if (qrType === "dynamic") {
+                    if (qrData.used) {
+                        return res.status(400).json({ error: "QR code already used" });
+                    }
+
+                    if (qrData.expires_at && qrData.expires_at.toDate() < new Date()) {
+                        return res.status(400).json({ error: "QR code expired" });
+                    }
+
+                    await qrDoc.ref.update({
+                        used: true,
+                        used_by: currentUser.uid,
+                        used_at: new Date()
                     });
                 }
-            }
-            await db.collection("daily_scans").add({
-                user_id: currentUser.uid,
-                seller_id: sellerId,
-                qr_id,
-                scan_date: today,
-                scanned_at: new Date()
-            });
 
-            // =====================================================
-            // Allocate points for QR scan
-            // =====================================================
-            const pointsRef = db.collection("points");
-            const pointsQuery = await pointsRef
-                .where("user_id", "==", currentUser.uid)
-                .where("seller_id", "==", sellerId)
-                .limit(1)
-                .get();
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
 
-            let newPoints = pointsValue;
+                // Location check
+                if (seller?.location.lat && seller.location.lng) {
+                    if (!user_lat || !user_lng) {
+                        return res.status(400).json({ error: "Location is required" });
+                    }
 
-            if (!pointsQuery.empty) {
-                const ref = pointsQuery.docs[0].ref;
-                const current = pointsQuery.docs[0].data().points || 0;
+                    const distance = calculateDistance(
+                        seller.location_lat,
+                        seller.location_lng,
+                        user_lat,
+                        user_lng
+                    );
 
-                newPoints = current + pointsValue;
+                    const maxDistance = seller.location_radius_meters || 100;
 
-                await ref.update({
-                    points: newPoints,
-                    last_updated: new Date()
-                });
-            } else {
-                await pointsRef.add({
+                    if (distance > maxDistance) {
+                        return res.status(400).json({
+                            error: `Too far from store. Must be within ${maxDistance}m`
+                        });
+                    }
+                }
+                await db.collection("daily_scans").add({
                     user_id: currentUser.uid,
                     seller_id: sellerId,
-                    points: pointsValue,
-                    last_updated: new Date()
+                    qr_id,
+                    scan_date: today,
+                    scanned_at: new Date()
                 });
-            }
 
-            // Add transaction
-            await db.collection("transactions").add({
-                user_id: currentUser.uid,
-                seller_id: sellerId,
-                seller_name: seller?.business?.shop_name,
-                points: pointsValue,
-                transaction_type: "earn",
-                qr_type: qrType,
-                timestamp: new Date(),
-                description: `Scanned ${qrType} QR - earned ${pointsValue} pts`
-            });
+                // =====================================================
+                // Allocate points for QR scan
+                // =====================================================
+                const pointsRef = db.collection("points");
+                const pointsQuery = await pointsRef
+                    .where("user_id", "==", currentUser.uid)
+                    .where("seller_id", "==", sellerId)
+                    .limit(1)
+                    .get();
 
-            // 🔥 UPDATE SELLER STATS for QR scan
-            await updateSellerStats(sellerId, pointsValue, newCustomer);
+                let newPoints = pointsValue;
 
-            return res.status(200).json({
-                success: true,
-                data: {
-                    message: "Points earned successfully",
-                    qr_type: qrType,
-                    points_earned: pointsValue,
-                    total_points: newPoints,
-                    seller_name: seller?.business?.shop_name,
+                if (!pointsQuery.empty) {
+                    const ref = pointsQuery.docs[0].ref;
+                    const current = pointsQuery.docs[0].data().points || 0;
+
+                    newPoints = current + pointsValue;
+
+                    await ref.update({
+                        points: newPoints,
+                        last_updated: new Date()
+                    });
+                } else {
+                    await pointsRef.add({
+                        user_id: currentUser.uid,
+                        seller_id: sellerId,
+                        points: pointsValue,
+                        last_updated: new Date()
+                    });
                 }
-            });
 
-        } catch (error: any) {
-            console.error("Scan QR Error:", error);
-            return res.status(500).json({ error: error.message });
-        }
+                // Add transaction
+                await db.collection("transactions").add({
+                    user_id: currentUser.uid,
+                    seller_id: sellerId,
+                    seller_name: seller?.business?.shop_name,
+                    points: pointsValue,
+                    transaction_type: "earn",
+                    qr_type: qrType,
+                    timestamp: new Date(),
+                    description: `Scanned ${qrType} QR - earned ${pointsValue} pts`
+                });
+
+                // 🔥 UPDATE SELLER STATS for QR scan
+                await updateSellerStats(sellerId, pointsValue, newCustomer);
+
+                return res.status(200).json({
+                    success: true,
+                    data: {
+                        message: "Points earned successfully",
+                        qr_type: qrType,
+                        points_earned: pointsValue,
+                        total_points: newPoints,
+                        seller_name: seller?.business?.shop_name,
+                    }
+                });
+
+            } catch (error: any) {
+                console.error("Scan QR Error:", error);
+                return res.status(500).json({ error: error.message });
+            }
+        });
     });
-});

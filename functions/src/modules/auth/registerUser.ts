@@ -21,7 +21,7 @@ interface RegisterUserData {
     lng: number;
 }
 
-export const registerUser = functions.https.onRequest(async (req, res) => {
+export const registerUser = functions.https.onRequest({ region: "asia-south1" }, async (req, res) => {
     corsHandler(req, res, async () => {
 
         if (req.method !== "POST") {

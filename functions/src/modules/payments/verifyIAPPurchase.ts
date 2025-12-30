@@ -39,6 +39,7 @@ function decodeApplePurchaseToken(jws: string) {
 }
 
 export const verifyIAPPurchase = functions.https.onRequest(
+    { region: 'asia-south1' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             try {

@@ -11,8 +11,10 @@ export const createOrderForUser = functions.https.onRequest(
         secrets: [
             "RAZORPAY_ENV",
             "RAZORPAY_KEY_ID_TEST",
-            "RAZORPAY_SECRET_TEST"
-        ]
+            "RAZORPAY_SECRET_TEST",
+
+        ],
+        region: "asia-south1",
     },
     async (req, res) => {
         corsHandler(req, res, async () => {

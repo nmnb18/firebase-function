@@ -12,6 +12,7 @@ import cors from "cors";
 const corsHandler = cors({ origin: true });
 
 export const generateQRCode = functions.https.onRequest(
+    { region: 'asia-south1' },
     async (request, response) => {
         corsHandler(request, response, async () => {
             try {
@@ -93,6 +94,8 @@ export const generateQRCode = functions.https.onRequest(
                     );
                 } else if (qrType === "static_hidden") {
                     hiddenCode = generateHiddenCode(8);
+                } else if (qrType === "static" && profile.subscription_tier === "free") {
+                    expiresAt = new Date(Date.now() + 1440 * 60 * 1000); // expires in 24 hrs
                 }
 
                 // ====================================================

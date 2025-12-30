@@ -6,114 +6,115 @@ import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 
-export const getPointsBalance = functions.https.onRequest(async (req, res) => {
-    corsHandler(req, res, async () => {
-        if (req.method !== "GET") {
-            return res.status(405).json({ error: "Method not allowed" });
-        }
-
-        try {
-            // Authenticate user
-            const currentUser = await authenticateUser(req.headers.authorization);
-
-            // Get all points documents for the user
-            const pointsSnapshot = await db.collection("points")
-                .where("user_id", "==", currentUser.uid)
-                .get();
-
-            if (pointsSnapshot.empty) {
-                return res.status(200).json([]);
+export const getPointsBalance = functions.https.onRequest(
+    { region: 'asia-south1' }, async (req, res) => {
+        corsHandler(req, res, async () => {
+            if (req.method !== "GET") {
+                return res.status(405).json({ error: "Method not allowed" });
             }
 
-            const pointsHoldSnapshot = await db.collection("points_hold")
-                .where("user_id", "==", currentUser.uid)
-                .get();
+            try {
+                // Authenticate user
+                const currentUser = await authenticateUser(req.headers.authorization);
 
-            // Calculate total points held/reserved
-            let totalPointsHeld = 0;
-            pointsHoldSnapshot.forEach(doc => {
-                const holdData = doc.data();
-                // Parse points as number (they're stored as string in your example)
-                const points = parseInt(holdData.points) || 0;
-                totalPointsHeld += points;
-            });
+                // Get all points documents for the user
+                const pointsSnapshot = await db.collection("points")
+                    .where("user_id", "==", currentUser.uid)
+                    .get();
 
-            const redemptionsSnapshot = await db.collection("redemptions")
-                .where("user_id", "==", currentUser.uid)
-                .get();
-            let pointsWaitingRedeem = 0;
-            let totalPointsRedeemed = 0;
-            redemptionsSnapshot.forEach(doc => {
-                const redemptionData = doc.data();
-                // Parse points as number (they're stored as string in your example)
-                if (redemptionData.status === 'pending') {
-                    const points = parseInt(redemptionData.points) || 0;
-                    pointsWaitingRedeem += points;
-                } else {
-                    const points = parseInt(redemptionData.points) || 0;
-                    totalPointsRedeemed += points;
+                if (pointsSnapshot.empty) {
+                    return res.status(200).json([]);
                 }
 
-            });
-            let totalPointsEarned = 0;
-            const balancePromises = pointsSnapshot.docs.map(async (pointDoc) => {
-                const pointData = pointDoc.data();
-                const sellerId = pointData.seller_id;
-                totalPointsEarned += pointData.points || 0;
-                // Get seller details
-                const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
-                const sellerData = sellerDoc.exists ? sellerDoc.data() : null;
+                const pointsHoldSnapshot = await db.collection("points_hold")
+                    .where("user_id", "==", currentUser.uid)
+                    .get();
 
-                // Get seller's reward configuration
-                const rewardConfig = sellerData?.rewards || {};
-                const offers = rewardConfig.offers || [];
+                // Calculate total points held/reserved
+                let totalPointsHeld = 0;
+                pointsHoldSnapshot.forEach(doc => {
+                    const holdData = doc.data();
+                    // Parse points as number (they're stored as string in your example)
+                    const points = parseInt(holdData.points) || 0;
+                    totalPointsHeld += points;
+                });
 
-                // Find minimum offer points
-                let minOfferPoints = 0;
-                if (offers.length > 0) {
-                    const offerPoints = offers.map((offer: any) => offer.reward_points || 0);
-                    minOfferPoints = Math.min(...offerPoints);
-                } else {
-                    // Fallback to default reward_points
-                    minOfferPoints = rewardConfig.reward_points || rewardConfig.default_points_value || 100;
-                }
+                const redemptionsSnapshot = await db.collection("redemptions")
+                    .where("user_id", "==", currentUser.uid)
+                    .get();
+                let pointsWaitingRedeem = 0;
+                let totalPointsRedeemed = 0;
+                redemptionsSnapshot.forEach(doc => {
+                    const redemptionData = doc.data();
+                    // Parse points as number (they're stored as string in your example)
+                    if (redemptionData.status === 'pending') {
+                        const points = parseInt(redemptionData.points) || 0;
+                        pointsWaitingRedeem += points;
+                    } else {
+                        const points = parseInt(redemptionData.points) || 0;
+                        totalPointsRedeemed += points;
+                    }
+
+                });
+                let totalPointsEarned = 0;
+                const balancePromises = pointsSnapshot.docs.map(async (pointDoc) => {
+                    const pointData = pointDoc.data();
+                    const sellerId = pointData.seller_id;
+                    totalPointsEarned += pointData.points || 0;
+                    // Get seller details
+                    const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
+                    const sellerData = sellerDoc.exists ? sellerDoc.data() : null;
+
+                    // Get seller's reward configuration
+                    const rewardConfig = sellerData?.rewards || {};
+                    const offers = rewardConfig.offers || [];
+
+                    // Find minimum offer points
+                    let minOfferPoints = 0;
+                    if (offers.length > 0) {
+                        const offerPoints = offers.map((offer: any) => offer.reward_points || 0);
+                        minOfferPoints = Math.min(...offerPoints);
+                    } else {
+                        // Fallback to default reward_points
+                        minOfferPoints = rewardConfig.reward_points || rewardConfig.default_points_value || 100;
+                    }
 
 
-                // Simple can_redeem logic: user points >= minimum offer points
-                const canRedeem = pointData.points >= minOfferPoints;
-                return {
-                    seller_id: sellerId,
-                    seller_name: sellerData?.business?.shop_name || "Unknown Store",
-                    points: pointData.points || 0,
-                    reward_points: rewardConfig.reward_points || rewardConfig.default_points_value || 100,
-                    reward_description: getRewardDescription(rewardConfig),
-                    can_redeem: canRedeem,
-                    offers: rewardConfig.offers || [],
-                    reward_type: rewardConfig.reward_type || 'default'
-                };
-            });
-            let availablePoints = totalPointsEarned - totalPointsHeld;
-            const balances = await Promise.all(balancePromises);
+                    // Simple can_redeem logic: user points >= minimum offer points
+                    const canRedeem = pointData.points >= minOfferPoints;
+                    return {
+                        seller_id: sellerId,
+                        seller_name: sellerData?.business?.shop_name || "Unknown Store",
+                        points: pointData.points || 0,
+                        reward_points: rewardConfig.reward_points || rewardConfig.default_points_value || 100,
+                        reward_description: getRewardDescription(rewardConfig),
+                        can_redeem: canRedeem,
+                        offers: rewardConfig.offers || [],
+                        reward_type: rewardConfig.reward_type || 'default'
+                    };
+                });
+                let availablePoints = totalPointsEarned - totalPointsHeld;
+                const balances = await Promise.all(balancePromises);
 
-            // Sort by points descending
-            balances.sort((a, b) => b.points - a.points);
+                // Sort by points descending
+                balances.sort((a, b) => b.points - a.points);
 
-            return res.status(200).json({
-                balances,
-                stats: {
-                    available_points: availablePoints,
-                    total_points_earned: totalPointsEarned,
-                    points_wating_redeem: pointsWaitingRedeem,
-                    total_points_redeem: totalPointsRedeemed
-                }
-            });
+                return res.status(200).json({
+                    balances,
+                    stats: {
+                        available_points: availablePoints,
+                        total_points_earned: totalPointsEarned,
+                        points_wating_redeem: pointsWaitingRedeem,
+                        total_points_redeem: totalPointsRedeemed
+                    }
+                });
 
-        } catch (error: any) {
-            console.error("Get balance error:", error);
-            return res.status(500).json({ error: error.message });
-        }
+            } catch (error: any) {
+                console.error("Get balance error:", error);
+                return res.status(500).json({ error: error.message });
+            }
+        });
     });
-});
 
 // Helper function to generate reward description
 function getRewardDescription(rewardConfig: any): string {

@@ -5,7 +5,7 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getSellerRedeemedPerks = functions.https.onRequest((req, res) => {
+export const getSellerRedeemedPerks = functions.https.onRequest({ region: "asia-south1", }, (req, res) => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "GET") {

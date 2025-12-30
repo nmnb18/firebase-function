@@ -10,7 +10,7 @@ const corsHandler = cors({ origin: true });
 
 
 export const verifyPayment = functions.https.onRequest(
-    { secrets: ["RAZORPAY_ENV", "RAZORPAY_SECRET_TEST"] },
+    { secrets: ["RAZORPAY_ENV", "RAZORPAY_SECRET_TEST"], region: "asia-south1", },
     async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {

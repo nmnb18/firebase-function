@@ -5,6 +5,7 @@ import cors from "cors";
 const corsHandler = cors({ origin: true });
 
 export const changePassword = functions.https.onRequest(
+    { region: 'asia-south1' },
     (req, res) => {
         corsHandler(req, res, async () => {
             try {

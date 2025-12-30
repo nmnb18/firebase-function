@@ -3,7 +3,7 @@ import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 
-export const requestPasswordReset = functions.https.onRequest({ secrets: ["API_KEY"] }, (req, res) => {
+export const requestPasswordReset = functions.https.onRequest({ secrets: ["API_KEY"], region: "asia-south1", }, (req, res) => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "POST") {

@@ -3,7 +3,7 @@ import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 
-export const testConnection = functions.https.onRequest((req, res) => {
+export const testConnection = functions.https.onRequest({ region: "asia-south1", }, (req, res) => {
     corsHandler(req, res, async () => {
         try {
             res.status(200).json({

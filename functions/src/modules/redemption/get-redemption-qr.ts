@@ -7,7 +7,7 @@ import { generateQRBase64 } from "../../utils/qr-helper";
 
 const corsHandler = cors({ origin: true });
 
-export const getRedemptionQR = functions.https.onRequest(async (req, res) => {
+export const getRedemptionQR = functions.https.onRequest({ region: "asia-south1" }, async (req, res) => {
     corsHandler(req, res, async () => {
         if (req.method !== "GET") {
             return res.status(405).json({ error: "Method not allowed" });

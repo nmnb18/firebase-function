@@ -5,7 +5,7 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getSubscriptionHistory = functions.https.onRequest(async (req, res) => {
+export const getSubscriptionHistory = functions.https.onRequest({ region: "asia-south1", }, async (req, res) => {
     corsHandler(req, res, async () => {
         if (req.method !== "GET") {
             return res.status(405).json({ error: "Only GET allowed" });

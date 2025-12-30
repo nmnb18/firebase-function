@@ -1,0 +1,166 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ───────────────── HELPERS ───────────────── */
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isUser(userId) {
+      return isAuth() && uid() == userId;
+    }
+
+    function isSeller(sellerId) {
+      return isAuth() && uid() == sellerId;
+    }
+
+    function isAdmin() {
+      return isAuth()
+        && get(/databases/$(database)/documents/users/$(uid())).data.role == "admin";
+    }
+
+    /* ───────────────── USERS ───────────────── */
+
+    match /users/{userId} {
+      allow create: if isAuth();
+      allow read, update: if isUser(userId);
+      allow delete: if false;
+    }
+
+    /* ───────────── CUSTOMER PROFILES ───────────── */
+
+    match /customer_profiles/{docId} {
+      allow create: if isAuth();
+      allow read, update: if isUser(resource.data.user_id);
+      allow delete: if false;
+    }
+
+    /* ───────────── SELLER PROFILES ───────────── */
+
+    match /seller_profiles/{sellerId} {
+      allow read: if true; // public shop info
+      allow create, update: if isSeller(sellerId);
+      allow delete: if isAdmin();
+    }
+
+    /* ───────────────── POINTS ───────────────── */
+    // Server-only writes (anti-fraud)
+
+    match /points/{docId} {
+      allow read: if isUser(resource.data.user_id)
+                  || isSeller(resource.data.seller_id)
+                  || isAdmin();
+      allow write: if false;
+    }
+
+    /* ───────────── POINT HOLDS ───────────── */
+
+    match /point_holds/{docId} {
+      allow read: if isUser(resource.data.user_id)
+                  || isSeller(resource.data.seller_id)
+                  || isAdmin();
+      allow write: if false;
+    }
+
+    /* ───────────────── QR CODES ───────────────── */
+
+    match /qr_codes/{qrId} {
+      allow read: if isAuth();
+      allow create, update: if isSeller(request.resource.data.seller_id);
+      allow delete: if isSeller(resource.data.seller_id);
+    }
+
+    /* ───────────────── TRANSACTIONS ───────────────── */
+
+    match /transactions/{txId} {
+      allow read: if isUser(resource.data.user_id)
+                  || isSeller(resource.data.seller_id);
+      allow write: if false;
+    }
+
+    /* ───────────────── REDEMPTIONS ───────────────── */
+
+    match /redemptions/{redemptionId} {
+      allow read: if isUser(resource.data.user_id)
+                  || isSeller(resource.data.seller_id);
+      allow write: if false;
+    }
+
+    /* ───────────────── DAILY SCANS ───────────────── */
+
+    match /daily_scans/{scanId} {
+      allow read: if isUser(resource.data.user_id)
+                  || isSeller(resource.data.seller_id);
+      allow write: if false;
+    }
+
+    /* ───────────────── PAYMENTS (SELLER) ───────────────── */
+
+    match /payments/{paymentId} {
+      allow read: if isSeller(resource.data.sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    /* ───────────────── USER PAYMENTS ───────────────── */
+
+    match /user_payments/{paymentId} {
+      allow read: if isUser(resource.data.user_id);
+      allow write: if false;
+    }
+
+    /* ───────────── SELLER SUBSCRIPTIONS ───────────── */
+
+    match /seller_subscriptions/{subId} {
+      allow read: if isSeller(resource.data.seller_id);
+      allow write: if false;
+    }
+
+    /* ───────────────── COUPONS ───────────────── */
+
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    /* ───────────── COUPON USAGE ───────────── */
+
+    match /coupon_usage/{usageId} {
+      allow read: if isSeller(resource.data.sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    /* ───────────── SELLER DAILY OFFER ───────────── */
+
+    match /seller_daily_offers/{sellerId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+     /* ───────────── SELLER DAILY OFFER ───────────── */
+
+    match /today_offer_claims/{offerId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+     /* ───────────── OFFER REDEMPTIONS ───────────── */
+
+    match /offer_redemption/{offerId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    /* ───────────────── DEFAULT DENY ───────────────── */
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -101,8 +101,9 @@ export const verifyPaymentForUser = functions.https.onRequest(
     {
         secrets: [
             "RAZORPAY_ENV",
-            "RAZORPAY_SECRET_TEST"
-        ]
+            "RAZORPAY_SECRET_TEST",
+        ],
+        region: "asia-south1",
     },
     async (req, res) => {
         corsHandler(req, res, async () => {

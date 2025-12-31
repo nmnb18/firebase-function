@@ -156,10 +156,25 @@ export const scanQRCode = functions.https.onRequest(
                 const pointsValue = qrType === 'static' || qrType === 'multiple'
                     ? qrData.points_value
                     : calculateRewardPoints(qrData.amount, seller);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                // ------------------------------
+                // Dynamic/Static QR (one-time use)
+                // ------------------------------
+                if (qrType === 'static') {
+                    const dailyScanQuery = await db
+                        .collection("daily_scans")
+                        .where("qr_id", "==", qr_id)
+                        .where("user_id", "==", currentUser.uid)
+                        .where('seller_id', "==", sellerId)
+                        .where("scan_date", "==", today)
+                        .limit(1)
+                        .get();
 
-                // ------------------------------
-                // Dynamic QR (one-time use)
-                // ------------------------------
+                    if (!dailyScanQuery.empty) {
+                        return res.status(400).json({ error: "QR code already used" });
+                    }
+                }
                 if (qrType === "dynamic") {
                     if (qrData.used) {
                         return res.status(400).json({ error: "QR code already used" });
@@ -176,8 +191,7 @@ export const scanQRCode = functions.https.onRequest(
                     });
                 }
 
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
+
 
                 // Location check
                 if (seller?.location.lat && seller.location.lng) {

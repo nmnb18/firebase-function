@@ -52,9 +52,13 @@ export const generateQRCode = functions.https.onRequest(
                     return;
                 }
 
+
+
                 const profileDoc = profileQuery.docs[0];
                 const sellerId = profileDoc.id;
                 const profile = profileDoc.data();
+
+
 
                 const qrType = qr_code_type || profile.qr_code_type;
 
@@ -72,7 +76,7 @@ export const generateQRCode = functions.https.onRequest(
                         .where("created_at", ">=", monthStart)
                         .get();
 
-                    if (countQuery.size >= 10) {
+                    if (countQuery.size >= 5) {
                         response.status(403).json({
                             error: "Monthly QR limit reached. Upgrade to Pro.",
                         });
@@ -209,6 +213,11 @@ export const generateQRCode = functions.https.onRequest(
                     expires_at: expiresAt,
                     points: points,
                 };
+
+                const sellerRef = db.collection("seller_profiles").doc(sellerId);
+                await sellerRef.update({
+                    'qr_settings.qr_code_type': qrType
+                })
 
                 response.status(200).json({
                     success: true,

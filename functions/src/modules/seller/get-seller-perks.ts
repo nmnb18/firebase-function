@@ -38,6 +38,8 @@ export const getSellerRedeemedPerks = functions.https.onRequest({ region: "asia-
                     seller_id: claim.seller_id,
                     shop_name: claim.shop_name,
                     shop_logo_url: claim.seller_logo,
+                    customer_name: claim.customer_name,
+                    customer_contact: claim.customer_contact,
                     offer_id: claim.offer_id,
                     offer_title: claim.title,
                     min_spend: claim.min_spend,

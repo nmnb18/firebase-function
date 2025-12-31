@@ -55,7 +55,7 @@ export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1
 
             // Fetch seller offers
             const doc = await db.collection("seller_daily_offers")
-                .doc(`${seller_id}_${'2025-12-18'}`) //TODO
+                .doc(`${seller_id}_${today}`)
                 .get();
 
             if (!doc.exists) {

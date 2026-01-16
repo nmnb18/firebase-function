@@ -93,9 +93,9 @@ export const registerSeller = functions.https.onRequest(
                     acceptTerms,
                 } = data;
                 console.error(data);
-                if (!email || !password || !name || !shopName || !phone) {
+                if (!email || !password || !name || !shopName) {
                     return res.status(400).json({
-                        error: "Missing required fields: email, password, name, shopName, phone",
+                        error: "Missing required fields: email, password, name, shopName",
                     });
                 }
 

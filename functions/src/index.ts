@@ -54,3 +54,7 @@ export { expireUnredeemedOffers } from "./modules/cron/expire-unredeemed-offers"
 export { getSellerRedeemedPerks } from "./modules/seller/get-seller-perks";
 export { phoneLogin } from "./modules/auth/phoneLogin";
 export { verifyIAPPurchase } from "./modules/payments/verifyIAPPurchase";
+export { generateUserQR } from "./modules/qr-code/generate-user-qr";
+export { scanUserQRCode } from "./modules/qr-code/scan-user-qr-code";
+export { unregisterPushToken } from "./modules/push-notification/unregisterPushToken";
+export { registerPushToken } from "./modules/push-notification/registerPushToken";

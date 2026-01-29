@@ -112,6 +112,8 @@ export const updateSellerProfile = functions.https.onRequest({ region: "asia-sou
                     updatedRewards.offers = preparedOffers;
                 }
 
+                updatedRewards.noEdit = true;
+
                 // ✅ Merge remaining reward fields safely (no duplication)
                 const { offers, ...otherRewardData } = data;
                 updatedRewards = {

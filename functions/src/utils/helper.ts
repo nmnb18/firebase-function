@@ -1,3 +1,4 @@
+import axios from "axios";
 import { adminRef, db } from "../config/firebase";
 
 const getMonthlyQRLimit = (tier: string): number => {
@@ -33,10 +34,38 @@ const getSubscriptionEndDate = (): any => {
     return adminRef.firestore.Timestamp.fromDate(endDate);
 };
 
-const sendWelcomeEmail = async (email: string, name: string, shopName: string): Promise<void> => {
+const sendVerificationEmail = async (email: string, name: string, verificationToken: string): Promise<void> => {
     // Implement your email service here (SendGrid, Mailgun, etc.)
     // This is a placeholder implementation
-    console.log(`Welcome email sent to ${email} for ${shopName}`);
+
+    await axios.post(
+        "https://control.msg91.com/api/v5/email/send",
+        {
+            to: [
+                {
+                    email,
+                    name,
+                },
+            ],
+            from: {
+                email: 'support@grabbitt.in',
+                name: "Grabbitt Support",
+            },
+            template_id: 'verify_mail',
+            variables: {
+                name,
+                verification_link: `https://grabbitt.in/verify-email?token=${verificationToken}`,
+                year: 2025
+            },
+        },
+        {
+            headers: {
+                authkey: '478648AmhpoC861T691da021P1',
+                "Content-Type": "application/json",
+            },
+        }
+    );
+
 };
 const generateInternalOrderId = async () => {
     const paymentsSnap = await db.collection("payments").get();
@@ -57,7 +86,7 @@ const generateRedeemCode = () => {
 }
 
 export {
-    sendWelcomeEmail,
+    sendVerificationEmail,
     getSubscriptionFeatures,
     getMonthlyQRLimit,
     getSubscriptionEndDate,

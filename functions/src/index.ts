@@ -58,3 +58,4 @@ export { generateUserQR } from "./modules/qr-code/generate-user-qr";
 export { scanUserQRCode } from "./modules/qr-code/scan-user-qr-code";
 export { unregisterPushToken } from "./modules/push-notification/unregisterPushToken";
 export { registerPushToken } from "./modules/push-notification/registerPushToken";
+export { verifyEmail } from "./modules/auth/verifyEmail";

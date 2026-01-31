@@ -1,11 +1,12 @@
 import * as functions from "firebase-functions";
 import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
+import crypto from "crypto";
 import {
     getMonthlyQRLimit,
     getSubscriptionEndDate,
     getSubscriptionPrice,
-    sendWelcomeEmail
+    sendVerificationEmail
 } from "../../utils/helper";
 
 const corsHandler = cors({ origin: true });
@@ -117,12 +118,19 @@ export const registerSeller = functions.https.onRequest(
                 // ------------------------------
                 // 👤 Create base user record
                 // ------------------------------
+                const verificationToken = crypto.randomBytes(32).toString("hex");
+                const tokenExpiry = adminRef.firestore.Timestamp.fromDate(
+                    new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+                );
                 await db.collection("users").doc(user.uid).set({
                     uid: user.uid,
                     email,
                     name,
                     phone,
                     role: "seller",
+                    email_verified: false,
+                    email_verification_token: verificationToken,
+                    email_verification_expires: tokenExpiry,
                     verified: false,
                     createdAt: adminRef.firestore.FieldValue.serverTimestamp(),
                     updatedAt: adminRef.firestore.FieldValue.serverTimestamp(),
@@ -240,7 +248,7 @@ export const registerSeller = functions.https.onRequest(
                 // ✉ Optional Welcome Email
                 // ------------------------------
                 try {
-                    await sendWelcomeEmail(email, name, shopName);
+                    await sendVerificationEmail(email, name, shopName);
                 } catch { }
 
                 // ------------------------------

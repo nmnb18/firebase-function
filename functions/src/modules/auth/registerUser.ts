@@ -1,7 +1,8 @@
 import * as functions from "firebase-functions";
 import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
-import { sendWelcomeEmail } from "../../utils/helper";
+import crypto from "crypto";
+import { sendVerificationEmail } from "../../utils/helper";
 
 const corsHandler = cors({ origin: true });
 
@@ -96,12 +97,19 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1" },
             // ---------------------------------------------
             // CREATE MAIN USER DOC
             // ---------------------------------------------
+            const verificationToken = crypto.randomBytes(32).toString("hex");
+            const tokenExpiry = adminRef.firestore.Timestamp.fromDate(
+                new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+            );
             await db.collection("users").doc(user.uid).set({
                 uid: user.uid,
                 role: "user",
                 name,
                 email,
                 phone,
+                email_verified: false,
+                email_verification_token: verificationToken,
+                email_verification_expires: tokenExpiry,
                 createdAt: adminRef.firestore.FieldValue.serverTimestamp(),
                 updatedAt: adminRef.firestore.FieldValue.serverTimestamp(),
             });
@@ -152,7 +160,7 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1" },
             // OPTIONAL: SEND WELCOME EMAIL
             // ---------------------------------------------
             try {
-                await sendWelcomeEmail(email, name, "Grabbitt User");
+                await sendVerificationEmail(email, name, verificationToken);
             } catch { }
 
             return res.status(200).json({

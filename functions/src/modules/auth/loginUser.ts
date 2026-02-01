@@ -55,6 +55,13 @@ export const loginUser = functions.https.onRequest(
                     return res.status(403).json({ error: "Invalid account type for this login" });
                 }
 
+                if (!userData?.email_verified || userData?.email_verified === false) {
+                    return res.status(403).json({
+                        error:
+                            "Please verify your email.",
+                    });
+                }
+
                 // 5️⃣ Login via Firebase REST API (password check)
                 const response = await fetch(
                     `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,

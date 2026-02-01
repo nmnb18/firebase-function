@@ -3,7 +3,7 @@ import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import crypto from "crypto";
 import {
-    getMonthlyQRLimit,
+    getMonthlyScanLimit,
     getSubscriptionEndDate,
     getSubscriptionPrice,
     sendVerificationEmail
@@ -48,7 +48,7 @@ interface RegisterSellerData {
     dailyMaxPoints?: number;
     upiIds: string[];
     qrCodeType: "dynamic" | "static" | "static_hidden";
-    subscriptionTier: "free" | "pro" | "enterprise";
+    subscriptionTier: "free" | "pro" | "premium";
 
     establishedYear?: string | null;
     acceptTerms: boolean;
@@ -89,7 +89,7 @@ export const registerSeller = functions.https.onRequest(
                     panNumber,
                     businessRegistrationNumber,
                     qrCodeType = "dynamic",
-                    subscriptionTier = "free",
+                    subscriptionTier = "pro",
                     establishedYear,
                     acceptTerms,
                 } = data;
@@ -199,7 +199,8 @@ export const registerSeller = functions.https.onRequest(
 
                         reward_name: data.rewardName ?? "",
                         reward_description: data.rewardDescription ?? "",
-                        upi_ids: data.upiIds
+                        upi_ids: data.upiIds,
+                        first_scan_bonus: { enabled: false, points: 0 }
                     },
 
                     qr_settings: {
@@ -207,9 +208,12 @@ export const registerSeller = functions.https.onRequest(
                     },
 
                     subscription: {
-                        tier: subscriptionTier,
-                        monthly_limit: getMonthlyQRLimit(subscriptionTier),
-                        price: getSubscriptionPrice(subscriptionTier),
+                        //tier: subscriptionTier,
+                        //monthly_limit: getMonthlyScanLimit(subscriptionTier),
+                        //price: getSubscriptionPrice(subscriptionTier),
+                        tier: 'pro',
+                        monthly_limit: getMonthlyScanLimit('pro'),
+                        price: getSubscriptionPrice('pro'),
                         status: "active",
                         period_start: adminRef.firestore.FieldValue.serverTimestamp(),
                         expires_at: getSubscriptionEndDate(),
@@ -226,6 +230,8 @@ export const registerSeller = functions.https.onRequest(
                         total_points_distributed: 0,
                         active_customers: 0,
                         monthly_scans: {},
+                        users_activated: 0,
+                        first_scan_bonus_given: 0
                     },
 
                     settings: {

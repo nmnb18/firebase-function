@@ -5,6 +5,8 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
+const SEARCH_RADIUS_KM = 25;
+
 // Distance calculator (Haversine Formula)
 function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     const R = 6371; // Radius of earth in KM
@@ -101,8 +103,8 @@ export const getNearbySellers = functions.https.onRequest(
                     // Calculate distance
                     const distanceKm = getDistanceKm(userLat!, userLng!, sLat, sLng);
                     const sellerId = s.user_id;
-                    // Only include within 1 km radius
-                    if (distanceKm <= 1) {
+                    // Only include within 35 km radius
+                    if (distanceKm <= SEARCH_RADIUS_KM) {
                         nearbySellers.push({
                             id: sellerId,
                             shop_name: s.business?.shop_name,

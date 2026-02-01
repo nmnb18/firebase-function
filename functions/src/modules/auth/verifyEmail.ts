@@ -27,7 +27,7 @@ export const verifyEmail = functions.https.onRequest(
             const userData = userDoc.data();
 
             if (userData.email_verification_expires.toDate() < new Date()) {
-                return res.status(400).json({ error: "Token expired" });
+                return res.status(400).json({ error: "Link expired" });
             }
 
             await userDoc.ref.update({

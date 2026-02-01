@@ -16,7 +16,7 @@ export async function enforceSubscriptionStatus(profile: any, sellerId: string) 
             ...sub,
             tier: "free",
             expires_at: getSubscriptionEndDate(),
-            monthly_limit: 10,
+            monthly_limit: 300,
             updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
         };
 

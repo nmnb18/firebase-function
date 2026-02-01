@@ -2,7 +2,7 @@ import * as functions from "firebase-functions";
 import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import crypto from "crypto";
-import { sendVerificationEmail } from "../../utils/helper";
+import { resolveCityStatus, sendVerificationEmail } from "../../utils/helper";
 
 const corsHandler = cors({ origin: true });
 
@@ -148,6 +148,10 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1" },
                     total_scans: 0,
                     total_rewards_claimed: 0,
                 },
+                activation: {
+                    activated_by: '',
+                    activated_at: ''
+                },
 
                 created_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
@@ -155,7 +159,17 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1" },
             };
 
             await db.collection("customer_profiles").doc(user.uid).set(customerProfile);
+            const settingsSnap = await db
+                .collection("app_settings")
+                .doc("city_config")
+                .get();
 
+            const settings = settingsSnap.data();
+
+            const cityStatus = resolveCityStatus(
+                city,
+                settings
+            );
             // ---------------------------------------------
             // OPTIONAL: SEND WELCOME EMAIL
             // ---------------------------------------------
@@ -172,6 +186,7 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1" },
                     name,
                     phone,
                     role: "user",
+                    city_status: cityStatus
                 },
             });
 

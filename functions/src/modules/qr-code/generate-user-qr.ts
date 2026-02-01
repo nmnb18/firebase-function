@@ -1,10 +1,10 @@
 import * as functions from "firebase-functions";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser, handleAuthError } from "../../middleware/auth";
-
 import cors from "cors";
-
+import crypto from "crypto";
 import { generateQRBase64 } from "../../utils/qr-helper";
+
 const corsHandler = cors({ origin: true });
 
 export const generateUserQR = functions.https.onRequest(
@@ -34,46 +34,41 @@ export const generateUserQR = functions.https.onRequest(
                 }
 
                 // ------------------------------
-                // FETCH CUSTOMER PROFILE
+                // GENERATE SECURE TOKEN
                 // ------------------------------
-                const profileSnap = await db
-                    .collection("customer_profiles")
-                    .where("user_id", "==", currentUser.uid)
-                    .limit(1)
-                    .get();
-
-                if (profileSnap.empty) {
-                    return res.status(404).json({
-                        error: "Customer profile not found",
-                    });
-                }
-
-                const profile = profileSnap.docs[0].data();
+                const token = crypto.randomBytes(32).toString("hex");
+                const now = adminRef.firestore.FieldValue.serverTimestamp();
 
                 // ------------------------------
-                // BUILD PAYLOAD
+                // BUILD SAFE PAYLOAD (NO PII)
                 // ------------------------------
                 const payload = {
-                    type: "USER_EARN",
-                    user_id: currentUser.uid,
-                    name: profile.account.name || "",
-                    email: profile.account.email || "",
-                    phone: profile.account.phone || "",
-                    issued_at: Date.now(),
+                    v: 1,
+                    t: "USER_EARN",
+                    token,
                 };
 
                 const qrData = JSON.stringify(payload);
                 const qrBase64 = await generateQRBase64(qrData);
 
-                const now = adminRef.firestore.FieldValue.serverTimestamp();
+                // ------------------------------
+                // STORE TOKEN → USER MAPPING
+                // ------------------------------
+                await db.collection("qr_tokens").doc(token).set({
+                    token,
+                    user_id: currentUser.uid,
+                    status: "active", // active | revoked
+                    created_at: now,
+                    last_used_at: null,
+                });
 
                 // ------------------------------
-                // STORE ONCE
+                // STORE USER QR (ONCE)
                 // ------------------------------
                 const qrDoc = {
                     user_id: currentUser.uid,
+                    token,
                     qr_base64: qrBase64,
-                    payload,
                     created_at: now,
                     updated_at: now,
                 };

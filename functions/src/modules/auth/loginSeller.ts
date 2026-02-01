@@ -67,6 +67,13 @@ export const loginSeller = functions.https.onRequest(
           });
         }
 
+        if (!userData?.email_verified || userData?.email_verified === false) {
+          return res.status(403).json({
+            error:
+              "Please verify your email.",
+          });
+        }
+
         // 5️⃣ Login via Firebase REST API (password check)
         const isEmulator = !!process.env.FIREBASE_AUTH_EMULATOR_HOST;
         console.log("isEmulator:", isEmulator);

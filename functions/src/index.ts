@@ -59,3 +59,7 @@ export { scanUserQRCode } from "./modules/qr-code/scan-user-qr-code";
 export { unregisterPushToken } from "./modules/push-notification/unregisterPushToken";
 export { registerPushToken } from "./modules/push-notification/registerPushToken";
 export { verifyEmail } from "./modules/auth/verifyEmail";
+export { validateCity } from "./modules/auth/validateCity";
+export { getNotifications } from "./modules/push-notification/getNotifications";
+export { getUnreadNotificationCount } from "./modules/push-notification/getUnreadNotificationCount";
+export { markNotificationsRead } from "./modules/push-notification/markNotificationsRead";

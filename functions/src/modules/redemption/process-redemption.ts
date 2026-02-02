@@ -3,6 +3,8 @@ import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 import { Redemption } from "../../types/redemption";
+import { saveNotification } from "@utils/helper";
+import pushService, { NotificationChannel, NotificationType } from "services/expo-service";
 
 const corsHandler = cors({ origin: true });
 
@@ -42,6 +44,32 @@ export const processRedemption = functions.https.onRequest(
                 if (redemption.status !== "pending") {
                     return res.status(400).json({
                         error: `Redemption already ${redemption.status}`
+                    });
+                }
+
+                // 3. Checl if QR is expired
+                const expiresAtMillis =
+                    redemption.expires_at instanceof adminRef.firestore.Timestamp
+                        ? redemption.expires_at.toMillis()
+                        : redemption.expires_at instanceof Date
+                            ? redemption.expires_at.getTime()
+                            : 0;
+                if (expiresAtMillis < Date.now()) {
+                    // Mark redemption expired
+                    await redemptionRef.update({
+                        status: "expired",
+                        updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                        metadata: {
+                            ...redemption.metadata,
+                            seller_notes: "QR expired"
+                        }
+                    });
+
+                    // Release point hold
+                    await releasePointHold(redemption_id);
+
+                    return res.status(400).json({
+                        error: "QR code has expired. Please ask customer to regenerate."
                     });
                 }
 
@@ -113,6 +141,67 @@ export const processRedemption = functions.https.onRequest(
 
                 // 8. Release point hold
                 await releasePointHold(redemption_id);
+
+
+                // ----------------------------------
+                // Send Push Notification
+                // ----------------------------------
+                await saveNotification(
+                    redemption.user_id,
+                    "⭐ Points Redeemed!",
+                    `You redeeems ${redemption.points} points at ${redemption.seller_shop_name}`,
+                    {
+                        type: NotificationType.REDEMPTION,
+                        screen: "/(drawer)/redeem/redeem-home",
+                        sellerId: redemption.seller_id,
+                        points: redemption.points,
+                    }
+                );
+
+                const tokenSnapPush = await db.collection("push_tokens").where("user_id", "==", redemption.user_id).get();
+                const userTokens = tokenSnapPush.docs.map(d => d.data().token);
+
+                if (userTokens.length > 0) {
+                    await pushService.sendToUser(
+                        userTokens,
+                        "⭐ Points Redeemed!",
+                        `You redeeems ${redemption.points} points at ${redemption.seller_shop_name}`,
+                        {
+                            type: NotificationType.REDEMPTION,
+                            screen: "/(drawer)/redeem/redeem-home",
+                            params: { sellerId: redemption.seller_id, points: redemption.points },
+                        },
+                        NotificationChannel.ORDERS
+                    ).catch(err => console.error("Push failed:", err));
+                }
+
+                await saveNotification(
+                    redemption.seller_id,
+                    "⭐ Points Redeemed!",
+                    `${redemption.user_name} has redeeemed ${redemption.points} for ${redemption.offer_name}`,
+                    {
+                        type: NotificationType.NEW_ORDER,
+                        screen: "/(drawer)/redemptions",
+                        points: redemption.points,
+                    }
+                );
+
+                const tokenSnap1 = await db.collection("push_tokens").where("user_id", "==", redemption.seller_id).get();
+                const sellerTokens = tokenSnap1.docs.map(d => d.data().token);
+
+                if (sellerTokens.length > 0) {
+                    await pushService.sendToUser(
+                        sellerTokens,
+                        "⭐ Points Redeemed!",
+                        `${redemption.user_name} has redeeemed ${redemption.points} for ${redemption.offer_name}`,
+                        {
+                            type: NotificationType.NEW_ORDER,
+                            screen: "/(drawer)/redemptions",
+                            params: { points: redemption.points },
+                        },
+                        NotificationChannel.ORDERS
+                    ).catch(err => console.error("Push failed:", err));
+                }
 
                 // 9. Return success response
                 return res.status(200).json({

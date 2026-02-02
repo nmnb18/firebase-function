@@ -92,6 +92,12 @@ export const createRedemption = functions.https.onRequest(
                 const userPointsDoc = pointsQuery.docs[0];
                 const pointsRef = userPointsDoc.ref;
 
+                const now = Date.now();
+                const expiresAt = adminRef.firestore.Timestamp.fromMillis(
+                    now + 5 * 60 * 1000 // 5 minutes
+                );
+
+
                 // 🔐 TRANSACTION (critical)
                 await db.runTransaction(async (tx) => {
                     // 1️⃣ Read total points
@@ -142,6 +148,7 @@ export const createRedemption = functions.https.onRequest(
                         seller_shop_name: seller?.business?.shop_name || "",
                         points,
                         status: "pending",
+                        expires_at: expiresAt,
                         offer_id: offer_id || null,
                         offer_name: offer_name || null,
                         qr_data: qrData,
@@ -159,6 +166,7 @@ export const createRedemption = functions.https.onRequest(
                 return res.status(200).json({
                     success: true,
                     redemption_id: redemptionId,
+                    expiresAt: expiresAt,
                     qr_code_base64: qrBase64,
                     qr_data: qrData,
                     status: "pending",

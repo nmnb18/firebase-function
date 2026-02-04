@@ -157,11 +157,6 @@ export const scanUserQRCode = functions.https.onRequest(
                     });
                 }
 
-                // OPTIONAL: anti-replay (update last_used_at)
-                await tokenSnap.ref.update({ last_used_at: adminRef.firestore.FieldValue.serverTimestamp() });
-
-
-
                 // ----------------------------------
                 // Fetch Seller Profile
                 // ----------------------------------
@@ -170,6 +165,7 @@ export const scanUserQRCode = functions.https.onRequest(
                     .limit(1).get();
 
                 if (sellerProfileSnap.empty) return res.status(404).json({ error: "Seller profile not found" });
+
 
                 const sellerDoc = sellerProfileSnap.docs[0];
                 const sellerId = sellerDoc.id;
@@ -219,6 +215,8 @@ export const scanUserQRCode = functions.https.onRequest(
                         }
                     });
                 }
+                // OPTIONAL: anti-replay (update last_used_at)
+                await tokenSnap.ref.update({ last_used_at: adminRef.firestore.FieldValue.serverTimestamp() });
 
                 // ----------------------------------
                 // Calculate Reward

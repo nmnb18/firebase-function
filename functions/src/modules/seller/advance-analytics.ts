@@ -110,6 +110,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
 
                 type CustomerAgg = {
                     user_id: string;
+                    customer_name: string;
                     scans: number;
                     points_earned: number;
                     points_redeemed: number; // NEW
@@ -128,6 +129,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date(d.timestamp);
                     const key = toDayKey(ts);
                     const userId = d.user_id as string;
+                    const customerName = d.customer_name;
                     const pts = Number(d.points || 0);
                     const qrType = d.qr_type || "unknown";
 
@@ -154,6 +156,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     // Customer aggregates
                     const prev = customerAgg.get(userId) || {
                         user_id: userId,
+                        customer_name: customerName,
                         scans: 0,
                         points_earned: 0,
                         points_redeemed: 0,
@@ -178,6 +181,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     const ts = d.created_at?.toDate ? d.created_at.toDate() : new Date(d.created_at);
                     const key = toDayKey(ts);
                     const userId = d.user_id as string;
+                    const customerName = d.user_name;
                     const points = Number(d.points || 0);
                     const status = d.status;
 
@@ -193,6 +197,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     if (status === "redeemed") {
                         const prev = customerAgg.get(userId) || {
                             user_id: userId,
+                            customer_name: customerName,
                             scans: 0,
                             points_earned: 0,
                             points_redeemed: 0,
@@ -248,6 +253,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     .slice(0, 20)
                     .map((c) => ({
                         user_id: c.user_id,
+                        customer_name: c.customer_name,
                         total_scans: c.scans,
                         total_points_earned: c.points_earned,
                         total_points_redeemed: c.points_redeemed,

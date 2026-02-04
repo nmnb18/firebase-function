@@ -166,7 +166,7 @@ export const createRedemption = functions.https.onRequest(
                 return res.status(200).json({
                     success: true,
                     redemption_id: redemptionId,
-                    expiresAt: expiresAt,
+                    expires_at: expiresAt,
                     qr_code_base64: qrBase64,
                     qr_data: qrData,
                     status: "pending",

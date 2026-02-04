@@ -3,8 +3,8 @@ import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 import { Redemption } from "../../types/redemption";
-import { saveNotification } from "@utils/helper";
-import pushService, { NotificationChannel, NotificationType } from "services/expo-service";
+import { saveNotification } from "../../utils/helper";
+import pushService, { NotificationChannel, NotificationType } from "../../services/expo-service";
 
 const corsHandler = cors({ origin: true });
 
@@ -124,6 +124,7 @@ export const processRedemption = functions.https.onRequest(
                 await db.collection("transactions").add({
                     user_id: redemption.user_id,
                     seller_id: redemption.seller_id,
+                    customer_name: redemption.user_name,
                     seller_name: redemption.seller_shop_name,
                     points: -Number(redemption.points), // Negative for redemption
                     transaction_type: "redeem",
@@ -165,7 +166,7 @@ export const processRedemption = functions.https.onRequest(
                     await pushService.sendToUser(
                         userTokens,
                         "⭐ Points Redeemed!",
-                        `You redeeems ${redemption.points} points at ${redemption.seller_shop_name}`,
+                        `You redeeemed ${redemption.points} points at ${redemption.seller_shop_name}`,
                         {
                             type: NotificationType.REDEMPTION,
                             screen: "/(drawer)/redeem/redeem-home",

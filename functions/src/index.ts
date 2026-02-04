@@ -63,3 +63,4 @@ export { validateCity } from "./modules/auth/validateCity";
 export { getNotifications } from "./modules/push-notification/getNotifications";
 export { getUnreadNotificationCount } from "./modules/push-notification/getUnreadNotificationCount";
 export { markNotificationsRead } from "./modules/push-notification/markNotificationsRead";
+export { markRedemptionAsExpired } from "./modules/redemption/markRedemtionAsExpired";

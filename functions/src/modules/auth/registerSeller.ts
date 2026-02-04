@@ -254,7 +254,7 @@ export const registerSeller = functions.https.onRequest(
                 // ✉ Optional Welcome Email
                 // ------------------------------
                 try {
-                    await sendVerificationEmail(email, name, shopName);
+                    await sendVerificationEmail(email, name, verificationToken);
                 } catch { }
 
                 // ------------------------------

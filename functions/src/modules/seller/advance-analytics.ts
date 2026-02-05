@@ -222,8 +222,9 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
 
                 // Build sorted trends arrays
                 const trends30 = Array.from(dailyMap30.values()).sort((a, b) =>
-                    a.date.localeCompare(b.date)
+                    b.date.localeCompare(a.date)
                 );
+
                 const trends7 = trends30.slice(-7);
 
                 // ----- B: NEW VS RETURNING -----

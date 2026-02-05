@@ -1,13 +1,13 @@
-// firebase-functions/src/redemption/getRedemptionStatus.ts
 import * as functions from "firebase-functions";
-import { db } from "../../config/firebase";
+import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 
 export const getRedemptionStatus = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1' },
+    async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -18,12 +18,11 @@ export const getRedemptionStatus = functions.https.onRequest(
                 const currentUser = await authenticateUser(req.headers.authorization);
 
                 const { redemption_id } = req.query;
-
                 if (!redemption_id) {
                     return res.status(400).json({ error: "redemption_id is required" });
                 }
 
-                // ✅ Find redemption by redemption_id (same pattern you use)
+                // ✅ Find redemption by redemption_id
                 const redemptionsQuery = await db.collection("redemptions")
                     .where("redemption_id", "==", redemption_id)
                     .limit(1)
@@ -34,14 +33,33 @@ export const getRedemptionStatus = functions.https.onRequest(
                 }
 
                 const redemptionDoc = redemptionsQuery.docs[0];
-                const redemptionData = redemptionDoc.data();
+                let redemptionData = redemptionDoc.data();
 
-                // ✅ Ownership check (same as your QR function)
+                // ✅ Ownership check
                 if (redemptionData.user_id !== currentUser.uid) {
                     return res.status(403).json({ error: "Not authorized to view this redemption" });
                 }
 
-                // ✅ Return full updated redemption object for polling
+                // ✅ Auto-expire if past expires_at and still pending
+                const now = Date.now();
+                let expiresAtMs: number;
+
+                if (redemptionData.expires_at?.toDate) {
+                    expiresAtMs = redemptionData.expires_at.toDate().getTime();
+                } else if (typeof redemptionData.expires_at === "number") {
+                    expiresAtMs = redemptionData.expires_at;
+                } else {
+                    expiresAtMs = new Date(redemptionData.expires_at).getTime();
+                }
+
+                if (redemptionData.status === "pending" && now >= expiresAtMs) {
+                    // Update Firestore to mark expired
+                    await redemptionDoc.ref.update({ status: "expired" });
+                    await releasePointHold(redemption_id as string);
+                    redemptionData.status = "expired";
+                }
+
+                // ✅ Return updated redemption object
                 return res.status(200).json({
                     success: true,
                     redemption: {
@@ -58,4 +76,21 @@ export const getRedemptionStatus = functions.https.onRequest(
                 return res.status(500).json({ error: error.message });
             }
         });
-    });
+    }
+);
+
+
+async function releasePointHold(redemptionId: string) {
+    const holdsQuery = await db.collection("point_holds")
+        .where("redemption_id", "==", redemptionId)
+        .where("status", "==", "reserved")
+        .limit(1)
+        .get();
+
+    if (!holdsQuery.empty) {
+        await holdsQuery.docs[0].ref.update({
+            status: "released",
+            released_at: adminRef.firestore.FieldValue.serverTimestamp()
+        });
+    }
+}

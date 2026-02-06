@@ -3,38 +3,38 @@ import { db } from "../../config/firebase";
 import { createCallableFunction } from "../../utils/callable";
 
 interface MarkNotificationsReadInput {
-  notificationIds: string[];
+    notificationIds: string[];
 }
 interface MarkNotificationsReadOutput {
-  success: boolean;
+    success: boolean;
 }
 
 export const markNotificationsRead = createCallableFunction<MarkNotificationsReadInput, MarkNotificationsReadOutput>(
-  async (data, auth, context) => {
-    try {
-      const userId = auth!.uid;
-      const { notificationIds } = data;
+    async (data, auth, context) => {
+        try {
+            const userId = auth!.uid;
+            const { notificationIds } = data;
 
-      const batch = db.batch();
-      const baseRef = db
-        .collection("user_notifications")
-        .doc(userId)
-        .collection("notifications");
+            const batch = db.batch();
+            const baseRef = db
+                .collection("user_notifications")
+                .doc(userId)
+                .collection("notifications");
 
-      notificationIds.forEach((id: string) => {
-        batch.update(baseRef.doc(id), { read: true });
-      });
+            notificationIds.forEach((id: string) => {
+                batch.update(baseRef.doc(id), { read: true });
+            });
 
-      await batch.commit();
+            await batch.commit();
 
-      return { success: true };
-    } catch (err: any) {
-      console.error("Mark read error", err);
-      throw new functions.https.HttpsError('internal', err.message);
+            return { success: true };
+        } catch (err: any) {
+            console.error("Mark read error", err);
+            throw new functions.https.HttpsError('internal', err.message);
+        }
+    },
+    {
+        region: 'asia-south1',
+        requireAuth: true
     }
-  },
-  {
-    region: 'asia-south1',
-    requireAuth: true
-  }
 );

@@ -95,8 +95,8 @@ export const loginUser = createCallableFunction<LoginUserData, any>(
             throw error;
         }
     },
-    { 
-        region: "asia-south1", 
+    {
+        region: "asia-south1",
         requireAuth: false // Login doesn't require pre-auth
     }
 );

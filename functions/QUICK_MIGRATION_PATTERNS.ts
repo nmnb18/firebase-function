@@ -98,8 +98,8 @@ export const transactionFunc = createCallableFunction<TransactionRequest, any>(
 
             // Write
             tx.update(db.collection("col1").doc(auth.uid), { balance: newBalance });
-            tx.update(db.collection("col2").doc(targetId), { 
-                balance: (doc2.data().balance || 0) + amount 
+            tx.update(db.collection("col2").doc(targetId), {
+                balance: (doc2.data().balance || 0) + amount
             });
 
             return { success: true, newBalance };

@@ -8,86 +8,86 @@ const fs = require('fs');
 const path = require('path');
 
 const authFunctions = [
-  {
-    file: 'src/modules/auth/registerUser.ts',
-    name: 'registerUser',
-    type: 'complex-write',
-    description: 'Create user with profile'
-  },
-  {
-    file: 'src/modules/auth/registerSeller.ts',
-    name: 'registerSeller',
-    type: 'complex-write',
-    description: 'Create seller with profile'
-  },
-  {
-    file: 'src/modules/auth/logout.ts',
-    name: 'logout',
-    type: 'simple-write',
-    description: 'Revoke refresh tokens'
-  },
-  {
-    file: 'src/modules/auth/refreshToken.ts',
-    name: 'refreshToken',
-    type: 'simple-read',
-    description: 'Get new ID token'
-  },
-  {
-    file: 'src/modules/auth/deleteUser.ts',
-    name: 'deleteUser',
-    type: 'complex-write',
-    description: 'Delete user and all data'
-  },
-  {
-    file: 'src/modules/auth/deleteSeller.ts',
-    name: 'deleteSeller',
-    type: 'complex-write',
-    description: 'Delete seller and all data'
-  },
-  {
-    file: 'src/modules/auth/changePassword.ts',
-    name: 'changePassword',
-    type: 'simple-write',
-    description: 'Update user password'
-  },
-  {
-    file: 'src/modules/auth/requestPasswordReset.ts',
-    name: 'requestPasswordReset',
-    type: 'simple-write',
-    description: 'Send password reset email'
-  },
-  {
-    file: 'src/modules/auth/confirmPasswordReset.ts',
-    name: 'confirmPasswordReset',
-    type: 'simple-write',
-    description: 'Confirm password reset'
-  },
-  {
-    file: 'src/modules/auth/reauthenticate.ts',
-    name: 'reauthenticate',
-    type: 'simple-read',
-    description: 'Re-verify user credentials'
-  },
-  {
-    file: 'src/modules/auth/phoneLogin.ts',
-    name: 'phoneLogin',
-    type: 'complex-read',
-    description: 'Login with phone number'
-  }
+    {
+        file: 'src/modules/auth/registerUser.ts',
+        name: 'registerUser',
+        type: 'complex-write',
+        description: 'Create user with profile'
+    },
+    {
+        file: 'src/modules/auth/registerSeller.ts',
+        name: 'registerSeller',
+        type: 'complex-write',
+        description: 'Create seller with profile'
+    },
+    {
+        file: 'src/modules/auth/logout.ts',
+        name: 'logout',
+        type: 'simple-write',
+        description: 'Revoke refresh tokens'
+    },
+    {
+        file: 'src/modules/auth/refreshToken.ts',
+        name: 'refreshToken',
+        type: 'simple-read',
+        description: 'Get new ID token'
+    },
+    {
+        file: 'src/modules/auth/deleteUser.ts',
+        name: 'deleteUser',
+        type: 'complex-write',
+        description: 'Delete user and all data'
+    },
+    {
+        file: 'src/modules/auth/deleteSeller.ts',
+        name: 'deleteSeller',
+        type: 'complex-write',
+        description: 'Delete seller and all data'
+    },
+    {
+        file: 'src/modules/auth/changePassword.ts',
+        name: 'changePassword',
+        type: 'simple-write',
+        description: 'Update user password'
+    },
+    {
+        file: 'src/modules/auth/requestPasswordReset.ts',
+        name: 'requestPasswordReset',
+        type: 'simple-write',
+        description: 'Send password reset email'
+    },
+    {
+        file: 'src/modules/auth/confirmPasswordReset.ts',
+        name: 'confirmPasswordReset',
+        type: 'simple-write',
+        description: 'Confirm password reset'
+    },
+    {
+        file: 'src/modules/auth/reauthenticate.ts',
+        name: 'reauthenticate',
+        type: 'simple-read',
+        description: 'Re-verify user credentials'
+    },
+    {
+        file: 'src/modules/auth/phoneLogin.ts',
+        name: 'phoneLogin',
+        type: 'complex-read',
+        description: 'Login with phone number'
+    }
 ];
 
 console.log('📋 Auth Functions Migration Report');
 console.log('==================================\n');
 
 authFunctions.forEach((fn, idx) => {
-  const fullPath = path.join('functions', fn.file);
-  const exists = fs.existsSync(fullPath);
-  console.log(`${idx + 1}. ${fn.name}`);
-  console.log(`   File: ${fn.file}`);
-  console.log(`   Type: ${fn.type}`);
-  console.log(`   Status: ${exists ? '✅ Found' : '❌ Not found'}`);
-  console.log(`   Task: ${fn.description}`);
-  console.log('');
+    const fullPath = path.join('functions', fn.file);
+    const exists = fs.existsSync(fullPath);
+    console.log(`${idx + 1}. ${fn.name}`);
+    console.log(`   File: ${fn.file}`);
+    console.log(`   Type: ${fn.type}`);
+    console.log(`   Status: ${exists ? '✅ Found' : '❌ Not found'}`);
+    console.log(`   Task: ${fn.description}`);
+    console.log('');
 });
 
 console.log('\n📊 Summary');

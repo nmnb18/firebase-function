@@ -80,7 +80,7 @@ function determineParamsFromFile(content) {
 function analyzeFunction(filePath, content) {
     const isReadFunction = content.includes('req.method === "GET"') || content.includes('req.query');
     const isWriteFunction = content.includes('req.method === "POST"') || content.includes('req.body');
-    
+
     return {
         type: isReadFunction ? 'read' : isWriteFunction ? 'write' : 'unknown',
         needsAuth: content.includes('authenticateUser') || content.includes('authorization'),
@@ -91,7 +91,7 @@ function analyzeFunction(filePath, content) {
 function markFileForMigration(filePath) {
     try {
         const content = fs.readFileSync(filePath, 'utf-8');
-        
+
         if (content.includes('[MIGRATION-MARKED]')) {
             return 'already_marked';
         }
@@ -99,7 +99,7 @@ function markFileForMigration(filePath) {
         // Add marker at the top
         const markedContent = `// [MIGRATION-MARKED]\n${content}`;
         fs.writeFileSync(filePath, markedContent);
-        
+
         return 'marked';
     } catch (error) {
         return 'error';
@@ -147,7 +147,7 @@ function main() {
     onRequestFiles.forEach((filePath, index) => {
         const relPath = path.relative(process.cwd(), filePath);
         const result = markFileForMigration(filePath);
-        
+
         if (result === 'marked') {
             markedCount++;
             console.log(`${index + 1}. ✓ Marked: ${relPath}`);

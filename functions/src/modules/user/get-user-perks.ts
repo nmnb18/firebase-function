@@ -1,7 +1,7 @@
 import { db } from "../../config/firebase";
 import { createCallableFunction } from "../../utils/callable";
 
-interface GetUserPerksInput {}
+interface GetUserPerksInput { }
 
 interface UserPerk {
     id: string;

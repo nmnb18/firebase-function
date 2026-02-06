@@ -223,73 +223,73 @@ export const requestPasswordReset = createCallableFunction<
 // ============================================================
 
 const remainingAuthFunctions = [
-  {
-    name: "verifyEmail",
-    file: "src/modules/auth/verifyEmail.ts",
-    type: "Template 2 (Email verification with token)",
-    priority: "HIGH"
-  },
-  {
-    name: "validateCity",
-    file: "src/modules/auth/validateCity.ts",
-    type: "Template 1 (Simple read)",
-    priority: "MEDIUM"
-  },
-  {
-    name: "requestPasswordReset",
-    file: "src/modules/auth/requestPasswordReset.ts",
-    type: "Template 4 (Email + token)",
-    priority: "HIGH"
-  },
-  {
-    name: "refreshToken",
-    file: "src/modules/auth/refreshToken.ts",
-    type: "Template 2 (Token exchange)",
-    priority: "HIGH"
-  },
-  {
-    name: "reauthenticate",
-    file: "src/modules/auth/reauthenticate.ts",
-    type: "Template 1 (Credential verification)",
-    priority: "MEDIUM"
-  },
-  {
-    name: "phoneLogin",
-    file: "src/modules/auth/phoneLogin.ts",
-    type: "Template 2 (Phone auth)",
-    priority: "MEDIUM"
-  },
-  {
-    name: "deleteUser",
-    file: "src/modules/auth/deleteUser.ts",
-    type: "Template 3 (Complex delete)",
-    priority: "HIGH"
-  },
-  {
-    name: "deleteSeller",
-    file: "src/modules/auth/deleteSeller.ts",
-    type: "Template 3 (Complex delete)",
-    priority: "HIGH"
-  },
-  {
-    name: "confirmPasswordReset",
-    file: "src/modules/auth/confirmPasswordReset.ts",
-    type: "Template 1 (Token verification + update)",
-    priority: "HIGH"
-  },
-  {
-    name: "changePassword",
-    file: "src/modules/auth/changePassword.ts",
-    type: "Template 1 (Simple write)",
-    priority: "MEDIUM"
-  }
+    {
+        name: "verifyEmail",
+        file: "src/modules/auth/verifyEmail.ts",
+        type: "Template 2 (Email verification with token)",
+        priority: "HIGH"
+    },
+    {
+        name: "validateCity",
+        file: "src/modules/auth/validateCity.ts",
+        type: "Template 1 (Simple read)",
+        priority: "MEDIUM"
+    },
+    {
+        name: "requestPasswordReset",
+        file: "src/modules/auth/requestPasswordReset.ts",
+        type: "Template 4 (Email + token)",
+        priority: "HIGH"
+    },
+    {
+        name: "refreshToken",
+        file: "src/modules/auth/refreshToken.ts",
+        type: "Template 2 (Token exchange)",
+        priority: "HIGH"
+    },
+    {
+        name: "reauthenticate",
+        file: "src/modules/auth/reauthenticate.ts",
+        type: "Template 1 (Credential verification)",
+        priority: "MEDIUM"
+    },
+    {
+        name: "phoneLogin",
+        file: "src/modules/auth/phoneLogin.ts",
+        type: "Template 2 (Phone auth)",
+        priority: "MEDIUM"
+    },
+    {
+        name: "deleteUser",
+        file: "src/modules/auth/deleteUser.ts",
+        type: "Template 3 (Complex delete)",
+        priority: "HIGH"
+    },
+    {
+        name: "deleteSeller",
+        file: "src/modules/auth/deleteSeller.ts",
+        type: "Template 3 (Complex delete)",
+        priority: "HIGH"
+    },
+    {
+        name: "confirmPasswordReset",
+        file: "src/modules/auth/confirmPasswordReset.ts",
+        type: "Template 1 (Token verification + update)",
+        priority: "HIGH"
+    },
+    {
+        name: "changePassword",
+        file: "src/modules/auth/changePassword.ts",
+        type: "Template 1 (Simple write)",
+        priority: "MEDIUM"
+    }
 ];
 
 console.log("📋 Remaining Auth Functions to Migrate");
 console.log("=====================================\n");
 
 remainingAuthFunctions.forEach((fn, idx) => {
-  console.log(`${idx + 1}. ${fn.name.padEnd(25)} | ${fn.priority.padEnd(7)} | ${fn.type}`);
+    console.log(`${idx + 1}. ${fn.name.padEnd(25)} | ${fn.priority.padEnd(7)} | ${fn.type}`);
 });
 
 console.log("\n✅ Already Migrated (5 functions):");
@@ -305,4 +305,4 @@ console.log("High Priority: 5 functions");
 console.log("Medium Priority: 5 functions");
 console.log("\n⏱️  Estimated Time: 4-6 hours for all functions");
 
-module.exports = {remainingAuthFunctions};
+module.exports = { remainingAuthFunctions };

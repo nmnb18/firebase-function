@@ -3,17 +3,17 @@ import { db } from "../../config/firebase";
 import { createCallableFunction } from "../../utils/callable";
 
 interface GetBalanceBySellerInput {
-  seller_id: string;
+    seller_id: string;
 }
 interface GetBalanceBySellerOutput {
-  seller_id: string;
-  seller_name: string;
-  points: number;
-  reward_points: number;
-  reward_description: string;
-  can_redeem: boolean;
-  offers: any[];
-  reward_type: string;
+    seller_id: string;
+    seller_name: string;
+    points: number;
+    reward_points: number;
+    reward_description: string;
+    can_redeem: boolean;
+    offers: any[];
+    reward_type: string;
 }
 
 // Helper function to generate reward description
@@ -52,69 +52,69 @@ function getRewardDescription(rewardConfig: any): string {
 }
 
 export const getBalanceBySeller = createCallableFunction<GetBalanceBySellerInput, GetBalanceBySellerOutput>(
-  async (data, auth, context) => {
-    try {
-      const currentUser = { uid: auth!.uid };
-      const sellerId = data.seller_id;
+    async (data, auth, context) => {
+        try {
+            const currentUser = { uid: auth!.uid };
+            const sellerId = data.seller_id;
 
-      if (!sellerId) {
-        throw new functions.https.HttpsError('invalid-argument', 'seller_id is required');
-      }
+            if (!sellerId) {
+                throw new functions.https.HttpsError('invalid-argument', 'seller_id is required');
+            }
 
-                // ------------------------------------------
-                // Get points for THIS user + THIS seller
-                // ------------------------------------------
-                const pointsSnapshot = await db.collection("points")
-                    .where("user_id", "==", currentUser.uid)
-                    .where("seller_id", "==", sellerId)
-                    .get();
+            // ------------------------------------------
+            // Get points for THIS user + THIS seller
+            // ------------------------------------------
+            const pointsSnapshot = await db.collection("points")
+                .where("user_id", "==", currentUser.uid)
+                .where("seller_id", "==", sellerId)
+                .get();
 
-                if (pointsSnapshot.empty) {
-                    throw new functions.https.HttpsError('not-found', 'No points found for this seller');
-                }
+            if (pointsSnapshot.empty) {
+                throw new functions.https.HttpsError('not-found', 'No points found for this seller');
+            }
 
-                // ------------------------------------------
-                // Calculate earned points for THIS seller
-                // ------------------------------------------
-                const pointDoc = pointsSnapshot.docs[0];
-                const pointData = pointDoc.data();
+            // ------------------------------------------
+            // Calculate earned points for THIS seller
+            // ------------------------------------------
+            const pointDoc = pointsSnapshot.docs[0];
+            const pointData = pointDoc.data();
 
-                const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
-                const sellerData = sellerDoc.exists ? sellerDoc.data() : null;
+            const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
+            const sellerData = sellerDoc.exists ? sellerDoc.data() : null;
 
-                const rewardConfig = sellerData?.rewards || {};
-                const offers = rewardConfig.offers || [];
+            const rewardConfig = sellerData?.rewards || {};
+            const offers = rewardConfig.offers || [];
 
-                let minOfferPoints = 0;
+            let minOfferPoints = 0;
 
-                if (offers.length > 0) {
-                    const offerPoints = offers.map((o: any) => o.reward_points || 0);
-                    minOfferPoints = Math.min(...offerPoints);
-                } else {
-                    minOfferPoints = rewardConfig.reward_points || rewardConfig.default_points_value || 100;
-                }
+            if (offers.length > 0) {
+                const offerPoints = offers.map((o: any) => o.reward_points || 0);
+                minOfferPoints = Math.min(...offerPoints);
+            } else {
+                minOfferPoints = rewardConfig.reward_points || rewardConfig.default_points_value || 100;
+            }
 
-                const canRedeem = pointData.points >= minOfferPoints;
+            const canRedeem = pointData.points >= minOfferPoints;
 
-      const balance = {
-        seller_id: sellerId,
-        seller_name: sellerData?.business?.shop_name || "Unknown Store",
-        points: pointData.points || 0,
-        reward_points: rewardConfig.reward_points || rewardConfig.default_points_value || 100,
-        reward_description: getRewardDescription(rewardConfig),
-        can_redeem: canRedeem,
-        offers: offers,
-        reward_type: rewardConfig.reward_type || "default"
-      };
+            const balance = {
+                seller_id: sellerId,
+                seller_name: sellerData?.business?.shop_name || "Unknown Store",
+                points: pointData.points || 0,
+                reward_points: rewardConfig.reward_points || rewardConfig.default_points_value || 100,
+                reward_description: getRewardDescription(rewardConfig),
+                can_redeem: canRedeem,
+                offers: offers,
+                reward_type: rewardConfig.reward_type || "default"
+            };
 
-      return balance;
-    } catch (error: any) {
-      console.error("Get single seller balance error:", error);
-      throw new functions.https.HttpsError('internal', error.message);
+            return balance;
+        } catch (error: any) {
+            console.error("Get single seller balance error:", error);
+            throw new functions.https.HttpsError('internal', error.message);
+        }
+    },
+    {
+        region: 'asia-south1',
+        requireAuth: true
     }
-  },
-  {
-    region: 'asia-south1',
-    requireAuth: true
-  }
 );

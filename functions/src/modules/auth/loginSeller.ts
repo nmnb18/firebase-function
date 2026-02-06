@@ -103,8 +103,8 @@ export const loginSeller = createCallableFunction<LoginSellerRequest, any>(
       throw error;
     }
   },
-  { 
-    region: "asia-south1", 
-    requireAuth: false 
+  {
+    region: "asia-south1",
+    requireAuth: false
   }
 );

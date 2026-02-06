@@ -129,7 +129,7 @@ function calculateRewardPoints(amount: number, seller: any): number {
 export const scanUserQRCode = createCallableFunction<ScanUserQRInput, ScanUserQROutput>(
     async (data, auth) => {
         const { token, amount = 0 } = data;
-        
+
         if (!token) throw new Error("Invalid QR code");
 
         if (amount < 0 || amount > 100000) {

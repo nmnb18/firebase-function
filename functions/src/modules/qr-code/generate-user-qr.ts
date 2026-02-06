@@ -1,94 +1,73 @@
-import * as functions from "firebase-functions";
 import { adminRef, db } from "../../config/firebase";
-import { authenticateUser, handleAuthError } from "../../middleware/auth";
-import cors from "cors";
+import { createCallableFunction } from "../../utils/callable";
 import crypto from "crypto";
 import { generateQRBase64 } from "../../utils/qr-helper";
 
-const corsHandler = cors({ origin: true });
+interface GenerateUserQROutput {
+    success: boolean;
+    data: {
+        user_id: string;
+        token: string;
+        qr_base64: string;
+        created_at: any;
+        updated_at: any;
+    };
+}
 
-export const generateUserQR = functions.https.onRequest(
-    { region: "asia-south1" },
-    async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET") {
-                    return res.status(405).json({ error: "Method not allowed" });
-                }
+export const generateUserQR = createCallableFunction<void, GenerateUserQROutput>(
+    async (data, auth, context) => {
+        const qrRef = db.collection("user_qr").doc(auth!.uid);
+        const qrSnap = await qrRef.get();
 
-                const currentUser = await authenticateUser(
-                    req.headers.authorization
-                );
+        // Return existing QR
+        if (qrSnap.exists) {
+            return {
+                success: true,
+                data: qrSnap.data() as any,
+            };
+        }
 
-                const qrRef = db.collection("user_qr").doc(currentUser.uid);
-                const qrSnap = await qrRef.get();
+        // Generate secure token
+        const token = crypto.randomBytes(32).toString("hex");
+        const now = adminRef.firestore.FieldValue.serverTimestamp();
 
-                // ------------------------------
-                // RETURN EXISTING QR
-                // ------------------------------
-                if (qrSnap.exists) {
-                    return res.status(200).json({
-                        success: true,
-                        data: qrSnap.data(),
-                    });
-                }
+        // Build safe payload (NO PII)
+        const payload = {
+            v: 1,
+            t: "USER_EARN",
+            token,
+        };
 
-                // ------------------------------
-                // GENERATE SECURE TOKEN
-                // ------------------------------
-                const token = crypto.randomBytes(32).toString("hex");
-                const now = adminRef.firestore.FieldValue.serverTimestamp();
+        const qrData = JSON.stringify(payload);
+        const qrBase64 = await generateQRBase64(qrData);
 
-                // ------------------------------
-                // BUILD SAFE PAYLOAD (NO PII)
-                // ------------------------------
-                const payload = {
-                    v: 1,
-                    t: "USER_EARN",
-                    token,
-                };
-
-                const qrData = JSON.stringify(payload);
-                const qrBase64 = await generateQRBase64(qrData);
-
-                // ------------------------------
-                // STORE TOKEN → USER MAPPING
-                // ------------------------------
-                await db.collection("qr_tokens").doc(token).set({
-                    token,
-                    user_id: currentUser.uid,
-                    status: "active", // active | revoked
-                    created_at: now,
-                    last_used_at: null,
-                });
-
-                // ------------------------------
-                // STORE USER QR (ONCE)
-                // ------------------------------
-                const qrDoc = {
-                    user_id: currentUser.uid,
-                    token,
-                    qr_base64: qrBase64,
-                    created_at: now,
-                    updated_at: now,
-                };
-
-                await qrRef.set(qrDoc);
-
-                return res.status(200).json({
-                    success: true,
-                    data: qrDoc,
-                });
-            } catch (error: any) {
-                if (error.name === "AuthError") {
-                    return handleAuthError(error, res);
-                }
-
-                console.error("Generate User QR Error:", error);
-                return res.status(500).json({
-                    error: error.message || "Internal server error",
-                });
-            }
+        // Store token → user mapping
+        await db.collection("qr_tokens").doc(token).set({
+            token,
+            user_id: auth!.uid,
+            status: "active",
+            created_at: now,
+            last_used_at: null,
         });
+
+        // Store user QR (once)
+        const qrDoc = {
+            user_id: auth!.uid,
+            token,
+            qr_base64: qrBase64,
+            created_at: now,
+            updated_at: now,
+        };
+
+        await qrRef.set(qrDoc);
+
+        return {
+            success: true,
+            data: qrDoc,
+        };
+    },
+    {
+        region: "asia-south1",
+        requireAuth: true,
     }
 );

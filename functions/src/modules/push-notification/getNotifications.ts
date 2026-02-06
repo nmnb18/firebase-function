@@ -1,28 +1,25 @@
 import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
+import { createCallableFunction } from "../../utils/callable";
 
-const corsHandler = cors({ origin: true });
+interface GetNotificationsInput {
+  limit?: number;
+  unread?: boolean;
+}
+interface GetNotificationsOutput {
+  success: boolean;
+  notifications: any[];
+  total: number;
+}
 
-export const getNotifications = functions.https.onRequest(
-    { region: "asia-south1" },
-    async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+export const getNotifications = createCallableFunction<GetNotificationsInput, GetNotificationsOutput>(
+  async (data, auth, context) => {
+    try {
+      const userId = auth!.uid;
 
-                // Authenticate user
-                const currentUser = await authenticateUser(req.headers.authorization);
-                const userId = currentUser.uid;
-
-                if (!currentUser || !userId) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
-
-                // Optional query params
-                const limit = Number(req.query.limit) || 50;
-                const unreadOnly = req.query.unread === "true";
+      // Optional query params
+      const limit = data.limit || 50;
+      const unreadOnly = data.unread || false;
 
                 let query = db
                     .collection("user_notifications")
@@ -41,11 +38,14 @@ export const getNotifications = functions.https.onRequest(
                     created_at: doc.data()?.created_at?.toDate?.() || null,
                 }));
 
-                return res.status(200).json({ success: true, notifications, total: notifications.length });
-            } catch (err: any) {
-                console.error("getUserNotifications Error:", err);
-                return res.status(500).json({ error: err.message || "Internal server error" });
-            }
-        });
+      return { success: true, notifications, total: notifications.length };
+    } catch (err: any) {
+      console.error("getUserNotifications Error:", err);
+      throw new functions.https.HttpsError('internal', err.message || 'Internal server error');
     }
+  },
+  {
+    region: 'asia-south1',
+    requireAuth: true
+  }
 );

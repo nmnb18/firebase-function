@@ -1,52 +1,62 @@
 import * as functions from "firebase-functions";
-import cors from "cors";
 import { db } from "../../config/firebase";
-import { authenticateUser } from "../../middleware/auth";
+import { createCallableFunction } from "../../utils/callable";
 
-const corsHandler = cors({ origin: true });
+interface RegisterPushTokenInput {
+  push_token: string;
+  platform?: string;
+  device_name?: string;
+  device_model?: string;
+}
+interface RegisterPushTokenOutput {
+  success: boolean;
+}
 
-export const registerPushToken = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                const user = await authenticateUser(req.headers.authorization); // gives user.uid
+export const registerPushToken = createCallableFunction<RegisterPushTokenInput, RegisterPushTokenOutput>(
+  async (data, auth, context) => {
+    try {
+      const userId = auth!.uid;
 
-                const {
-                    push_token,
-                    platform,
-                    device_name,
-                    device_model,
-                } = req.body;
+      const {
+        push_token,
+        platform,
+        device_name,
+        device_model,
+      } = data;
 
-                if (!push_token) {
-                    return res.status(400).json({ error: "Push token missing" });
-                }
+      if (!push_token) {
+        throw new functions.https.HttpsError('invalid-argument', 'Push token missing');
+      }
 
-                // Avoid duplicates
-                const existing = await db
-                    .collection("push_tokens")
-                    .where("user_id", "==", user.uid)
-                    .where("token", "==", push_token)
-                    .get();
+      // Avoid duplicates
+      const existing = await db
+        .collection("push_tokens")
+        .where("user_id", "==", userId)
+        .where("token", "==", push_token)
+        .get();
 
-                if (!existing.empty) {
-                    return res.json({ success: true });
-                }
+      if (!existing.empty) {
+        return { success: true };
+      }
 
-                await db.collection("push_tokens").add({
-                    user_id: user.uid,
-                    token: push_token,
-                    platform,
-                    device_name,
-                    device_model,
-                    created_at: new Date(),
-                    updated_at: new Date(),
-                });
+      await db.collection("push_tokens").add({
+        user_id: userId,
+        token: push_token,
+        platform,
+        device_name,
+        device_model,
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
 
-                res.json({ success: true });
-            } catch (err) {
-                console.error(err);
-                res.status(401).json({ error: "Unauthorized" });
-            }
-        });
-    });
+      return { success: true };
+    } catch (err) {
+      console.error(err);
+      throw new functions.https.HttpsError('internal', 'Failed to register push token');
+    }
+  },
+  {
+    region: 'asia-south1',
+    requireAuth: true
+  }
+);

@@ -1,24 +1,25 @@
-import * as functions from "firebase-functions";
-import cors from "cors";
+import { createCallableFunction } from "../utils/callable";
 
-const corsHandler = cors({ origin: true });
+interface TestConnectionOutput {
+    success: boolean;
+    message: string;
+    timestamp: string;
+    environment: string;
+    endpoint: string;
+}
 
-export const testConnection = functions.https.onRequest({ region: "asia-south1", }, (req, res) => {
-    corsHandler(req, res, async () => {
-        try {
-            res.status(200).json({
-                success: true,
-                message: "Firebase Functions emulator is working!",
-                timestamp: new Date().toISOString(),
-                clientIP: req.ip,
-                environment: "development",
-                endpoint: "testConnection"
-            });
-        } catch (error: any) {
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
-    });
-});
+export const testConnection = createCallableFunction<void, TestConnectionOutput>(
+    async (data, auth, context) => {
+        return {
+            success: true,
+            message: "Firebase Functions callable is working!",
+            timestamp: new Date().toISOString(),
+            environment: "production",
+            endpoint: "testConnection"
+        };
+    },
+    {
+        region: "asia-south1",
+        requireAuth: false
+    }
+);

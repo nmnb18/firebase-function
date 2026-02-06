@@ -1,114 +1,99 @@
-import * as functions from "firebase-functions";
+import { createCallableFunction } from "../../utils/callable";
 import { db } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
 import admin from "firebase-admin";
 
-const corsHandler = cors({ origin: true });
+interface VerifyRedeemCodeRequest {
+  redeem_code: string;
+}
 
-export const verifyRedeemCode = functions.https.onRequest(
-    { region: 'asia-south1' }, (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "POST") {
-                    return res.status(405).json({ error: "POST only" });
-                }
+export const verifyRedeemCode = createCallableFunction<
+  VerifyRedeemCodeRequest,
+  any
+>(
+  async (data, auth) => {
+    const { redeem_code } = data;
+    const sellerId = auth!.uid;
 
-                // 🔐 Seller authentication
-                const currentUser = await authenticateUser(req.headers.authorization);
-                if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
+    if (!redeem_code) {
+      throw new Error("redeem_code required");
+    }
 
-                const seller_id = currentUser.uid;
-                const { redeem_code } = req.body;
+    const redemptionRef = db
+      .collection("offer_redemptions")
+      .doc(redeem_code);
 
-                if (!redeem_code) {
-                    return res.status(400).json({ error: "redeem_code required" });
-                }
+    let resultPayload: any = null;
 
-                const redemptionRef = db
-                    .collection("offer_redemptions")
-                    .doc(redeem_code);
+    await db.runTransaction(async (tx) => {
+      // 1. Fetch redemption
+      const redemptionSnap = await tx.get(redemptionRef);
+      if (!redemptionSnap.exists) {
+        throw new Error("Invalid redeem code");
+      }
 
-                let resultPayload: any = null;
+      const redemption = redemptionSnap.data();
+      if (!redemption) {
+        throw new Error("Invalid redeem code");
+      }
 
-                await db.runTransaction(async (tx) => {
-                    // 1️⃣ Fetch redemption
-                    const redemptionSnap = await tx.get(redemptionRef);
-                    if (!redemptionSnap.exists) {
-                        throw new Error("Invalid redeem code");
-                    }
+      // Ownership check
+      if (redemption.seller_id !== sellerId) {
+        throw new Error("This code does not belong to your store");
+      }
 
-                    const redemption = redemptionSnap.data();
-                    if (!redemption) {
-                        throw new Error("Invalid redeem code");
-                    }
+      // Already redeemed
+      if (redemption.status === "REDEEMED") {
+        throw new Error("Code already redeemed");
+      }
 
-                    // 🧾 Ownership check
-                    if (redemption.seller_id !== seller_id) {
-                        throw new Error("This code does not belong to your store");
-                    }
+      // 2. Fetch today offer claim
+      const claimId = `${redemption.user_id}_${sellerId}_${redemption.date}`;
+      const claimRef = db.collection("today_offer_claims").doc(claimId);
 
-                    // 🚫 Already redeemed
-                    if (redemption.status === "REDEEMED") {
-                        throw new Error("Code already redeemed");
-                    }
+      const claimSnap = await tx.get(claimRef);
+      if (!claimSnap.exists) {
+        throw new Error("Offer claim not found");
+      }
 
-                    // 2️⃣ Fetch today offer claim
-                    const claimId = `${redemption.user_id}_${seller_id}_${redemption.date}`;
-                    const claimRef = db
-                        .collection("today_offer_claims")
-                        .doc(claimId);
+      const claim = claimSnap.data();
+      if (!claim) {
+        throw new Error("Offer claim not found");
+      }
 
-                    const claimSnap = await tx.get(claimRef);
-                    if (!claimSnap.exists) {
-                        throw new Error("Offer claim not found");
-                    }
+      // 3. Update redemption
+      tx.update(redemptionRef, {
+        status: "REDEEMED",
+        redeemed_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-                    const claim = claimSnap.data();
-                    if (!claim) {
-                        throw new Error("Offer claim not found");
-                    }
+      // 4. Update today_offer_claims
+      tx.update(claimRef, {
+        status: "REDEEMED",
+        redeemed: true,
+      });
 
-                    // 3️⃣ Update redemption
-                    tx.update(redemptionRef, {
-                        status: "REDEEMED",
-                        redeemed_at: admin.firestore.FieldValue.serverTimestamp(),
-                    });
+      // Response payload
+      resultPayload = {
+        success: true,
+        redemption: {
+          redeemed: true,
+          redeem_code,
+          user_id: redemption.user_id,
+          seller_id: sellerId,
+          date: redemption.date,
 
-                    // 4️⃣ Update today_offer_claims
-                    tx.update(claimRef, {
-                        status: "REDEEMED",
-                        redeemed: true,
-                    });
-
-                    // ✅ Response payload
-                    resultPayload = {
-                        success: true,
-                        redemption: {
-                            redeemed: true,
-                            redeem_code,
-                            user_id: redemption.user_id,
-                            seller_id,
-                            date: redemption.date,
-
-                            // 👇 OFFER DETAILS (from today_offer_claims)
-                            offer: {
-                                offer_id: claim.offer_id,
-                                title: claim.title,
-                                min_spend: claim.min_spend,
-                                terms: claim.terms,
-                            },
-                        }
-
-                    };
-                });
-
-                return res.status(200).json(resultPayload);
-            } catch (err: any) {
-                console.error("verifyRedeemCode error:", err);
-                return res.status(400).json({ error: err.message });
-            }
-        });
+          // OFFER DETAILS (from today_offer_claims)
+          offer: {
+            offer_id: claim.offer_id,
+            title: claim.title,
+            min_spend: claim.min_spend,
+            terms: claim.terms,
+          },
+        },
+      };
     });
+
+    return resultPayload;
+  },
+  { region: "asia-south1", requireAuth: true }
+);

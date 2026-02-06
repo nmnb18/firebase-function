@@ -1,22 +1,27 @@
-import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
+import { createCallableFunction } from "../../utils/callable";
 
-const corsHandler = cors({ origin: true });
+interface AssignTodayOfferInput {
+    seller_id: string;
+}
 
-export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1", }, (req, res) => {
-    corsHandler(req, res, async () => {
+interface AssignTodayOfferOutput {
+    success: boolean;
+    alreadyAssigned?: boolean;
+    offer: any;
+}
+
+export const assignTodayOffer = createCallableFunction<AssignTodayOfferInput, AssignTodayOfferOutput>(
+    async (data, auth, context) => {
         try {
-            if (req.method !== "POST")
-                return res.status(405).json({ error: "POST only" });
+            if (!auth?.uid) {
+                throw new Error("Unauthorized");
+            }
 
-            const currentUser = await authenticateUser(req.headers.authorization);
-            if (!currentUser?.uid)
-                return res.status(401).json({ error: "Unauthorized" });
-
-            const { seller_id } = req.body;
-            if (!seller_id) return res.status(400).json({ error: "seller_id required" });
+            const { seller_id } = data;
+            if (!seller_id) {
+                throw new Error("seller_id required");
+            }
 
             const sellerSnap = await db
                 .collection("seller_profiles")
@@ -24,33 +29,33 @@ export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1
                 .get();
 
             if (!sellerSnap.exists) {
-                return res.status(404).json({ error: "Seller not found" });
+                throw new Error("Seller not found");
             }
 
             const seller = sellerSnap.data();
 
             const userSnap = await db
                 .collection("customer_profiles")
-                .doc(currentUser.uid)
+                .doc(auth!.uid)
                 .get();
 
             if (!userSnap.exists) {
-                return res.status(404).json({ error: "User not found" });
+                throw new Error("User not found");
             }
 
             const user = sellerSnap.data();
 
             const today = new Date().toISOString().slice(0, 10);
-            const claimId = `${currentUser.uid}_${seller_id}_${today}`;
+            const claimId = `${auth!.uid}_${seller_id}_${today}`;
 
             // Already selected → return existing
             const claimSnap = await db.collection("today_offer_claims").doc(claimId).get();
             if (claimSnap.exists) {
-                return res.status(200).json({
+                return {
                     success: true,
                     alreadyAssigned: true,
                     offer: claimSnap.data()
-                });
+                };
             }
 
             // Fetch seller offers
@@ -59,11 +64,13 @@ export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1
                 .get();
 
             if (!doc.exists) {
-                return res.status(404).json({ error: "No offers configured for today" });
+                throw new Error("No offers configured for today");
             }
 
             const offers = doc.data()?.offers || [];
-            if (!offers.length) return res.status(400).json({ error: "No offers available" });
+            if (!offers.length) {
+                throw new Error("No offers available");
+            }
 
             // Random secure selection
             const randomIndex = Math.floor(Math.random() * offers.length);
@@ -74,7 +81,7 @@ export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1
                 min_spend: selected.min_spend,
                 terms: selected.terms,
                 seller_id,
-                user_id: currentUser.uid,
+                user_id: auth!.uid,
                 date: today,
                 status: 'ASSIGNED',
                 redeemed: false,
@@ -85,10 +92,14 @@ export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1
                 customer_contact: user?.account.phone
             });
 
-            return res.status(200).json({ success: true, offer: selected });
+            return { success: true, offer: selected };
         } catch (err: any) {
             console.error("assignTodayOffer error:", err);
-            return res.status(500).json({ error: err.message });
+            throw err;
         }
-    });
-});
+    },
+    {
+        region: "asia-south1",
+        requireAuth: true
+    }
+);

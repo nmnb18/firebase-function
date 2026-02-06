@@ -1,62 +1,64 @@
-import * as functions from "firebase-functions";
+import { createCallableFunction } from "../../utils/callable";
 import { adminRef, db } from "../../config/firebase";
-import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { Redemption } from "../../types/redemption";
 
-const corsHandler = cors({ origin: true });
-
-export const markRedemptionAsExpired = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-
-                const { redemption_id } = req.body;
-
-                if (!redemption_id) {
-                    return res.status(400).json({ error: "redemption_id is required" });
-                }
-
-                // 1. Verify seller owns this redemption
-                const redemptionRef = db.collection("redemptions").doc(redemption_id);
-                const redemptionDoc = await redemptionRef.get();
-
-                if (!redemptionDoc.exists) {
-                    return res.status(404).json({ error: "Redemption not found" });
-                }
-
-                const redemption = redemptionDoc.data() as Redemption;
-
-                await redemptionRef.update({
-                    status: "expired",
-                    updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
-                    metadata: {
-                        ...redemption.metadata,
-                        seller_notes: "QR expired"
-                    }
-                });
-
-                // Release point hold
-                await releasePointHold(redemption_id);
-
-                return res.status(200).json({
-                    success: true
-                });
-            }
-        })
-    });
-
 async function releasePointHold(redemptionId: string) {
-    const holdsQuery = await db.collection("point_holds")
-        .where("redemption_id", "==", redemptionId)
-        .where("status", "==", "reserved")
-        .limit(1)
-        .get();
+  const holdsQuery = await db
+    .collection("point_holds")
+    .where("redemption_id", "==", redemptionId)
+    .where("status", "==", "reserved")
+    .limit(1)
+    .get();
 
-    if (!holdsQuery.empty) {
-        await holdsQuery.docs[0].ref.update({
-            status: "released",
-            released_at: adminRef.firestore.FieldValue.serverTimestamp()
-        });
-    }
+  if (!holdsQuery.empty) {
+    await holdsQuery.docs[0].ref.update({
+      status: "released",
+      released_at: adminRef.firestore.FieldValue.serverTimestamp(),
+    });
+  }
 }
+
+interface MarkExpiredRequest {
+  redemption_id: string;
+}
+
+export const markRedemptionAsExpired = createCallableFunction<
+  MarkExpiredRequest,
+  any
+>(
+  async (data, auth) => {
+    const { redemption_id } = data;
+
+    if (!redemption_id) {
+      throw new Error("redemption_id is required");
+    }
+
+    // 1. Verify redemption exists
+    const redemptionRef = db.collection("redemptions").doc(redemption_id);
+    const redemptionDoc = await redemptionRef.get();
+
+    if (!redemptionDoc.exists) {
+      throw new Error("Redemption not found");
+    }
+
+    const redemption = redemptionDoc.data() as Redemption;
+
+    // Update and release point hold in parallel
+    await Promise.all([
+      redemptionRef.update({
+        status: "expired",
+        updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+        metadata: {
+          ...redemption.metadata,
+          seller_notes: "QR expired",
+        },
+      }),
+      releasePointHold(redemption_id),
+    ]);
+
+    return {
+      success: true,
+    };
+  },
+  { region: "asia-south1", requireAuth: true }
+);

@@ -1,69 +1,67 @@
-import * as functions from "firebase-functions";
+import { createCallableFunction } from "../../utils/callable";
 import { adminRef, db } from "../../config/firebase";
-import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { v4 as uuidv4 } from "uuid";
-
-const corsHandler = cors({ origin: true });
 
 const bucket = adminRef.storage().bucket();
 
-export const updateSellerMedia = functions.https.onRequest({ region: "asia-south1", }, async (req: any, res) => {
-    corsHandler(req, res, async () => {
-        try {
-            if (req.method !== "POST") {
-                return res.status(405).json({ error: "Method not allowed" });
-            }
+const uploadBase64 = async (base64: string, path: string): Promise<string> => {
+  const file = bucket.file(path);
+  await file.save(Buffer.from(base64, "base64"), {
+    contentType: "image/jpeg",
+    public: false,
+  });
+  await file.makePublic();
+  const url = `https://storage.googleapis.com/${bucket.name}/${file.name}`;
+  return url;
+};
 
-            const currentUser = await authenticateUser(req.headers.authorization);
-            if (!currentUser?.uid) {
-                return res.status(401).json({ error: "Unauthorized" });
-            }
+interface UpdateMediaRequest {
+  logo?: string;
+  banner?: string;
+}
 
-            const sellerId = currentUser.uid;
+export const updateSellerMedia = createCallableFunction<UpdateMediaRequest, any>(
+  async (data, auth) => {
+    const { logo, banner } = data;
 
-            const { logo, banner } = req.body;
+    if (!logo && !banner) {
+      throw new Error("No media provided");
+    }
 
-            if (!logo && !banner) {
-                return res.status(400).json({ error: "No media provided" });
-            }
+    const sellerId = auth!.uid;
+    const updates: any = {};
 
-            const updates: any = {};
+    // Upload logo and banner in parallel if both provided
+    const uploadTasks = [];
 
-            // Upload helper
-            const uploadBase64 = async (base64: string, path: string) => {
-                const file = bucket.file(path);
-                await file.save(Buffer.from(base64, "base64"), {
-                    contentType: "image/jpeg",
-                    public: false,
-                });
-                await file.makePublic();
-                const url = `https://storage.googleapis.com/${bucket.name}/${file.name}`;
-                return url;
-            };
+    if (logo) {
+      const logoPath = `seller_media/${sellerId}/logo_${uuidv4()}.jpg`;
+      uploadTasks.push(
+        uploadBase64(logo, logoPath).then((url) => {
+          updates["media.logo_url"] = url;
+        })
+      );
+    }
 
-            // LOGO
-            if (logo) {
-                const logoPath = `seller_media/${sellerId}/logo_${uuidv4()}.jpg`;
-                updates["media.logo_url"] = await uploadBase64(logo, logoPath);
-            }
+    if (banner) {
+      const bannerPath = `seller_media/${sellerId}/banner_${uuidv4()}.jpg`;
+      uploadTasks.push(
+        uploadBase64(banner, bannerPath).then((url) => {
+          updates["media.banner_url"] = url;
+        })
+      );
+    }
 
-            // BANNER
-            if (banner) {
-                const bannerPath = `seller_media/${sellerId}/banner_${uuidv4()}.jpg`;
-                updates["media.banner_url"] = await uploadBase64(banner, bannerPath);
-            }
+    // Execute uploads in parallel
+    await Promise.all(uploadTasks);
 
-            await db.collection("seller_profiles").doc(sellerId).update(updates);
+    // Update Firestore
+    await db.collection("seller_profiles").doc(sellerId).update(updates);
 
-            return res.status(200).json({
-                success: true,
-                media: updates,
-            });
-
-        } catch (error: any) {
-            console.error("updateSellerMedia Error:", error);
-            return res.status(500).json({ error: error.message });
-        }
-    });
-});
+    return {
+      success: true,
+      media: updates,
+    };
+  },
+  { region: "asia-south1", requireAuth: true }
+);

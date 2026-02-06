@@ -1,115 +1,89 @@
-import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
+import { createCallableFunction } from "../../utils/callable";
 import { generateQRBase64 } from "../../utils/qr-helper";
 import { QRCodeResponse } from "./types";
 
-const corsHandler = cors({ origin: true });
+interface GetActiveQROutput {
+    success: boolean;
+    data: QRCodeResponse[];
+}
 
-export const getActiveQR = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                // ------------------------------
-                // METHOD CHECK
-                // ------------------------------
-                if (req.method !== "GET") {
-                    return res.status(405).json({ error: "Only GET allowed" });
-                }
+export const getActiveQR = createCallableFunction<void, GetActiveQROutput>(
+    async (data, auth, context) => {
+        // Fetch seller profile
+        const sellerQuery = await db
+            .collection("seller_profiles")
+            .where("user_id", "==", auth!.uid)
+            .limit(1)
+            .get();
 
-                // ------------------------------
-                // AUTH
-                // ------------------------------
-                const currentUser = await authenticateUser(req.headers.authorization);
-                if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
+        if (sellerQuery.empty) {
+            throw new Error("Seller profile not found");
+        }
 
-                // ------------------------------
-                // FETCH SELLER PROFILE
-                // ------------------------------
-                const sellerQuery = await db
-                    .collection("seller_profiles")
-                    .where("user_id", "==", currentUser.uid)
-                    .limit(1)
-                    .get();
+        const sellerId = sellerQuery.docs[0].id;
 
-                if (sellerQuery.empty) {
-                    return res.status(404).json({ error: "Seller profile not found" });
-                }
+        // Fetch all active QRs
+        const qrSnapshot = await db
+            .collection("qr_codes")
+            .where("seller_id", "==", sellerId)
+            .where("status", "==", "active")
+            .get();
 
-                const sellerId = sellerQuery.docs[0].id;
+        if (qrSnapshot.empty) {
+            return {
+                success: true,
+                data: [],
+            };
+        }
 
-                // ====================================================
-                // ✅ FETCH ALL ACTIVE QRs
-                // ====================================================
-                const qrSnapshot = await db
-                    .collection("qr_codes")
-                    .where("seller_id", "==", sellerId)
-                    .where("status", "==", "active")
-                    .get();
+        const now = Date.now();
+        const batch = db.batch();
+        let hasBatchUpdates = false;
+        const validQrs: QRCodeResponse[] = [];
 
-                if (qrSnapshot.empty) {
-                    return res.status(200).json({
-                        success: true,
-                        data: [],
+        // Handle expiry + base64
+        for (const doc of qrSnapshot.docs) {
+            const qr = doc.data() as QRCodeResponse;
+
+            // Dynamic expiry
+            if (qr.qr_type === "dynamic" && qr.expires_at) {
+                const expiresAt =
+                    qr.expires_at instanceof Date
+                        ? qr.expires_at.getTime()
+                        : (qr.expires_at as any).toMillis();
+
+                if (expiresAt <= now) {
+                    batch.update(doc.ref, {
+                        status: "inactive",
+                        expires_at: new Date(),
                     });
+                    hasBatchUpdates = true;
+                    continue;
                 }
-
-                const now = Date.now();
-                const batch = db.batch();
-                let hasBatchUpdates = false;
-                const validQrs: QRCodeResponse[] = [];
-
-                // ====================================================
-                // ✅ HANDLE EXPIRY + BASE64
-                // ====================================================
-                for (const doc of qrSnapshot.docs) {
-                    const qr = doc.data() as QRCodeResponse;
-
-                    // ✅ Dynamic expiry
-                    if (qr.qr_type === "dynamic" && qr.expires_at) {
-                        const expiresAt =
-                            qr.expires_at instanceof Date
-                                ? qr.expires_at.getTime()
-                                : qr.expires_at.toMillis();
-
-                        if (expiresAt <= now) {
-                            batch.update(doc.ref, {
-                                status: "inactive",
-                                expires_at: new Date(),
-                            });
-                            hasBatchUpdates = true;
-                            continue;
-                        }
-                    }
-
-                    // ✅ Generate Base64
-                    const qrData = `grabbitt://${qr.qr_id}`;
-                    const qrBase64 = await generateQRBase64(qrData);
-
-                    validQrs.push({
-                        ...qr,
-                        qr_code_base64: qrBase64,
-                    });
-                }
-
-                // ✅ ONLY COMMIT IF WE ACTUALLY UPDATED SOMETHING
-                if (hasBatchUpdates) {
-                    await batch.commit();
-                }
-
-                // ✅ RETURN MULTIPLE QRs
-                return res.status(200).json({
-                    success: true,
-                    data: validQrs,
-                });
-            } catch (error: any) {
-                console.error("getActiveQR error:", error);
-                return res.status(500).json({
-                    error: error.message || "Internal server error",
-                });
             }
-        });
-    });
+
+            // Generate Base64
+            const qrData = `grabbitt://${qr.qr_id}`;
+            const qrBase64 = await generateQRBase64(qrData);
+
+            validQrs.push({
+                ...qr,
+                qr_code_base64: qrBase64,
+            });
+        }
+
+        if (hasBatchUpdates) {
+            await batch.commit();
+        }
+
+        return {
+            success: true,
+            data: validQrs,
+        };
+    },
+    {
+        region: "asia-south1",
+        requireAuth: true,
+    }
+);

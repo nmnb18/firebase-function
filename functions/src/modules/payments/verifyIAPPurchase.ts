@@ -1,32 +1,41 @@
-import * as functions from "firebase-functions";
-import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
-import { authenticateUser } from "../../middleware/auth";
+import { createCallableFunction } from "../../utils/callable";
 
-const corsHandler = cors({ origin: true });
+interface VerifyIAPPurchaseInput {
+    purchaseToken: string;
+    productId: string;
+    transactionId: string;
+}
+
+interface VerifyIAPPurchaseOutput {
+    success: boolean;
+    message: string;
+    subscription?: {
+        order_id: string;
+        plan: string;
+        expires_at: string;
+        monthly_qr_limit: number;
+    };
+}
 
 const PLAN_CONFIG = {
     seller_pro_30d: {
         id: "seller_pro_30d",
         name: "pro",
-        price: 0, // Apple controls the price — DO NOT store price here
+        price: 0,
         durationDays: 30,
-        monthly_qr_limit: 9999, // your choice
+        monthly_qr_limit: 9999,
     },
-
     seller_premium_1yr: {
         id: "seller_premium_1yr",
         name: "premium",
-        price: 0, // Apple controls pricing
+        price: 0,
         durationDays: 365,
-        monthly_qr_limit: 99999, // unlimited or high number
+        monthly_qr_limit: 99999,
     },
 } as const;
 
-/**
- * Decode Apple on-device JWS (purchaseToken)
- * NOTE: Pre-launch safe (no crypto verification yet)
- */
+/** Decode Apple on-device JWS (purchaseToken) */
 function decodeApplePurchaseToken(jws: string) {
     const parts = jws.split(".");
     if (parts.length !== 3) {
@@ -38,163 +47,125 @@ function decodeApplePurchaseToken(jws: string) {
     );
 }
 
-export const verifyIAPPurchase = functions.https.onRequest(
-    { region: 'asia-south1' },
-    async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "POST") {
-                    return res.status(405).json({ error: "Only POST allowed" });
-                }
+export const verifyIAPPurchase = createCallableFunction<VerifyIAPPurchaseInput, VerifyIAPPurchaseOutput>(
+    async (data, auth, context) => {
+        const { purchaseToken, productId, transactionId } = data;
 
-                const currentUser = await authenticateUser(
-                    req.headers.authorization
-                );
-                if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
+        if (!purchaseToken || !productId || !transactionId) {
+            throw new Error("Missing purchaseToken, productId, or transactionId");
+        }
 
-                const { purchaseToken, productId, transactionId } = req.body;
+        const plan = PLAN_CONFIG[productId as keyof typeof PLAN_CONFIG];
+        if (!plan) {
+            throw new Error("Invalid plan");
+        }
 
-                if (!purchaseToken || !productId || !transactionId) {
-                    return res.status(400).json({
-                        error: "Missing purchaseToken, productId, or transactionId",
-                    });
-                }
+        // Decode Apple payload
+        const payload = decodeApplePurchaseToken(purchaseToken);
 
-                const plan = PLAN_CONFIG[productId as keyof typeof PLAN_CONFIG];
-                if (!plan) {
-                    return res.status(400).json({ error: "Invalid plan" });
-                }
+        // Validate core fields
+        if (payload.productId !== productId) {
+            throw new Error("Product mismatch");
+        }
 
-                // 🔓 Decode Apple payload
-                const payload = decodeApplePurchaseToken(purchaseToken);
+        if (payload.transactionId !== transactionId) {
+            throw new Error("Transaction mismatch");
+        }
 
-                // ✅ Validate core fields
-                if (payload.productId !== productId) {
-                    throw new Error("Product mismatch");
-                }
+        if (!payload.expiresDate) {
+            throw new Error("Missing expiry in Apple payload");
+        }
 
-                if (payload.transactionId !== transactionId) {
-                    throw new Error("Transaction mismatch");
-                }
+        const now = new Date();
+        const expiresAt = new Date(
+            now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
+        );
+        const originalTransactionId = payload.originalTransactionId;
+        const environment = payload.environment;
 
-                if (!payload.expiresDate) {
-                    throw new Error("Missing expiry in Apple payload");
-                }
-                const now = new Date();
-                const expiresAt = new Date(
-                    now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
-                );;
-                const originalTransactionId = payload.originalTransactionId;
-                const environment = payload.environment; // Sandbox / Production
+        const sellerId = auth!.uid;
 
-                const sellerId = currentUser.uid;
+        // Prevent duplicate processing
+        const historyRef = db
+            .collection("subscription_history")
+            .doc(sellerId)
+            .collection("records");
 
-                // 🔒 Prevent duplicate processing
-                const historyRef = db
-                    .collection("subscription_history")
-                    .doc(sellerId)
-                    .collection("records");
+        const existing = await historyRef
+            .where("original_transaction_id", "==", originalTransactionId)
+            .limit(1)
+            .get();
 
-                const existing = await historyRef
-                    .where(
-                        "original_transaction_id",
-                        "==",
-                        originalTransactionId
-                    )
-                    .limit(1)
-                    .get();
+        if (!existing.empty) {
+            return {
+                success: true,
+                message: "Subscription already processed",
+            };
+        }
 
-                if (!existing.empty) {
-                    return res.status(200).json({
-                        success: true,
-                        message: "Subscription already processed",
-                    });
-                }
-
-                /**
-                 * 1️⃣ Update seller_profiles (same as Razorpay)
-                 */
-                await db.collection("seller_profiles").doc(sellerId).update({
-                    subscription: {
-                        tier: plan.name,
-                        expires_at: adminRef.firestore.Timestamp.fromDate(
-                            expiresAt
-                        ),
-                        qr_limit: plan.monthly_qr_limit,
-                        updated_at:
-                            adminRef.firestore.FieldValue.serverTimestamp(),
-                        last_payment: {
-                            store: "apple",
-                            product_id: productId,
-                            transaction_id: transactionId,
-                            original_transaction_id: originalTransactionId,
-                            environment,
-                            paid_at:
-                                adminRef.firestore.FieldValue.serverTimestamp(),
-                        },
-                    },
-                });
-
-                /**
-                 * 2️⃣ Update seller_subscriptions (mirror Razorpay)
-                 */
-                await db.collection("seller_subscriptions").doc(sellerId).set(
-                    {
-                        tier: plan.name,
-                        status: "active",
-                        price: null, // Apple controls pricing
-                        original_price: null,
-                        monthly_qr_limit: plan.monthly_qr_limit,
-                        current_period_start:
-                            adminRef.firestore.FieldValue.serverTimestamp(),
-                        current_period_end:
-                            adminRef.firestore.Timestamp.fromDate(expiresAt),
-                        store: "apple",
-                        updated_at:
-                            adminRef.firestore.FieldValue.serverTimestamp(),
-                    },
-                    { merge: true }
-                );
-
-                /**
-                 * 3️⃣ Insert subscription_history record
-                 */
-                await historyRef.add({
+        // Update seller_profiles
+        await db.collection("seller_profiles").doc(sellerId).update({
+            subscription: {
+                tier: plan.name,
+                expires_at: adminRef.firestore.Timestamp.fromDate(expiresAt),
+                qr_limit: plan.monthly_qr_limit,
+                updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                last_payment: {
                     store: "apple",
                     product_id: productId,
                     transaction_id: transactionId,
                     original_transaction_id: originalTransactionId,
-                    plan_id: productId,
-                    seller_id: sellerId,
-                    amount: null,
-                    original_amount: null,
                     environment,
-                    status: "paid",
-                    paid_at:
-                        adminRef.firestore.FieldValue.serverTimestamp(),
-                    expires_at:
-                        adminRef.firestore.Timestamp.fromDate(expiresAt),
-                });
-
-                return res.status(200).json({
-                    success: true,
-                    message: "Apple subscription verified",
-                    subscription: {
-                        order_id: transactionId,
-                        plan: plan.name,
-                        expires_at: expiresAt.toISOString(),
-                        monthly_qr_limit: plan.monthly_qr_limit,
-                    },
-                });
-            } catch (error: any) {
-                console.error("verifyIAPPurchase error:", error);
-                return res.status(500).json({
-                    success: false,
-                    error: error.message || "Verification failed",
-                });
-            }
+                    paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                },
+            },
         });
+
+        // Update seller_subscriptions
+        await db.collection("seller_subscriptions").doc(sellerId).set(
+            {
+                tier: plan.name,
+                status: "active",
+                price: null,
+                original_price: null,
+                monthly_qr_limit: plan.monthly_qr_limit,
+                current_period_start: adminRef.firestore.FieldValue.serverTimestamp(),
+                current_period_end: adminRef.firestore.Timestamp.fromDate(expiresAt),
+                store: "apple",
+                updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+        );
+
+        // Insert subscription_history record
+        await historyRef.add({
+            store: "apple",
+            product_id: productId,
+            transaction_id: transactionId,
+            original_transaction_id: originalTransactionId,
+            plan_id: productId,
+            seller_id: sellerId,
+            amount: null,
+            original_amount: null,
+            environment,
+            status: "paid",
+            paid_at: adminRef.firestore.FieldValue.serverTimestamp(),
+            expires_at: adminRef.firestore.Timestamp.fromDate(expiresAt),
+        });
+
+        return {
+            success: true,
+            message: "Apple subscription verified",
+            subscription: {
+                order_id: transactionId,
+                plan: plan.name,
+                expires_at: expiresAt.toISOString(),
+                monthly_qr_limit: plan.monthly_qr_limit,
+            },
+        };
+    },
+    {
+        region: "asia-south1",
+        requireAuth: true,
     }
 );

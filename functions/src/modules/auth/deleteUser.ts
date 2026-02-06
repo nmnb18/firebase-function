@@ -1,61 +1,42 @@
-import * as functions from "firebase-functions";
+import { createCallableFunction } from "../../utils/callable";
 import { db, adminRef } from "../../config/firebase";
-import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 
-const corsHandler = cors({ origin: true });
-export const deleteUser = functions.https.onRequest(
-    { region: "asia-south1" },
-    (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "DELETE") {
-                    return res.status(405).json({ error: "Only DELETE allowed" });
-                }
+export const deleteUser = createCallableFunction<{}, { success: boolean; message: string }>(
+  async (data, auth, context) => {
+    const userId = context.auth.uid;
+    const now = adminRef.firestore.FieldValue.serverTimestamp();
 
-                const currentUser = await authenticateUser(req.headers.authorization);
-                if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
+    // 1️⃣ PARALLEL: Soft delete profiles + disable QR codes
+    const qrSnap = await db.collection("qr_codes")
+      .where("used_by", "==", userId)
+      .get();
 
-                const userId = currentUser.uid;
-                const now = adminRef.firestore.FieldValue.serverTimestamp();
+    const batch = db.batch();
+    qrSnap.forEach(doc => {
+      batch.update(doc.ref, { disabled_for_user: true });
+    });
 
-                // 1️⃣ Soft delete Firestore profile
-                await db.collection("users").doc(userId).update({
-                    deleted: true,
-                    deleted_at: now,
-                });
+    // Parallel operations: mark as deleted + batch update QR + batch commit
+    await Promise.all([
+      db.collection("users").doc(userId).update({
+        deleted: true,
+        deleted_at: now,
+      }),
+      db.collection("customer_profiles").doc(userId).update({
+        deleted: true,
+        deleted_at: now,
+      }),
+      batch.commit()
+    ]);
 
-                await db.collection("customer_profiles").doc(userId).update({
-                    deleted: true,
-                    deleted_at: now,
-                });
+    // 2️⃣ Delete Firebase Auth user (final step, after data is soft-deleted)
+    await adminRef.auth().deleteUser(userId);
 
-                // 2️⃣ Disable future scans / actions (optional)
-                const qrSnap = await db.collection("qr_codes")
-                    .where("used_by", "==", userId)
-                    .get();
-
-                const batch = db.batch();
-                qrSnap.forEach(doc => {
-                    batch.update(doc.ref, { disabled_for_user: true });
-                });
-                await batch.commit();
-
-                // 3️⃣ Delete Firebase Auth user (final step)
-                await adminRef.auth().deleteUser(userId);
-
-                return res.status(200).json({
-                    success: true,
-                    message: "User account deleted safely",
-                });
-
-            } catch (err: any) {
-                console.error("Delete User Error:", err);
-                return res.status(500).json({ success: false, error: err.message });
-            }
-        });
-    }
+    return {
+      success: true,
+      message: "User account deleted safely",
+    };
+  },
+  { region: "asia-south1", requireAuth: true }
 );
 

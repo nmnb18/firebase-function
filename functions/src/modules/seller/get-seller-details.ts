@@ -1,55 +1,63 @@
 import * as functions from "firebase-functions";
-import { db, auth } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
+import { db } from "../../config/firebase";
+import { createCallableFunction } from "../../utils/callable";
+import { generateCacheKey, cacheManager } from "../../utils/performance";
 import { enforceSubscriptionStatus } from "../../utils/subscription";
 
-const corsHandler = cors({ origin: true });
+interface GetSellerDetailsRequest {
+    uid: string;
+}
 
-export const getSellerDetails = functions.https.onRequest(
-    { region: 'asia-south1' }, (req, res) => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "GET") return res.status(405).json({ error: "GET only" });
+export const getSellerDetails = createCallableFunction<GetSellerDetailsRequest, any>(
+    async (data, auth, context) => {
+        const { uid } = data;
 
-            const uid = req.query.uid as string;
-            if (!uid) return res.status(400).json({ error: "UID required" });
+        if (!auth?.uid) {
+            throw new Error("Unauthorized");
+        }
 
-            try {
-                // authenticate
-                const currentUser = await authenticateUser(req.headers.authorization);
-                // authenticateUser in your middleware likely ends response on failure; 
-                // assume it sets req.currentUser (adjust if your function works differently)
-                //const currentUser = (req as any).currentUser;
-                if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
-                const userDoc = await db.collection("users").doc(uid).get();
-                if (!userDoc.exists) return res.status(404).json({ error: "User not found" });
+        if (!uid) {
+            throw new Error("UID is required");
+        }
 
-                const userData = userDoc.data();
+        // Check cache first
+        const cacheKey = generateCacheKey("sellerDetails", { uid });
+        const cached = cacheManager.get(cacheKey);
+        if (cached) return cached;
 
-                // Include seller profile if exists
-                const sellerSnap = await db.collection("seller_profiles")
-                    .where("user_id", "==", uid)
-                    .limit(1)
-                    .get();
+        // Parallel fetches
+        const [userDoc, sellerSnap] = await Promise.all([
+            db.collection("users").doc(uid).get(),
+            db
+                .collection("seller_profiles")
+                .where("user_id", "==", uid)
+                .limit(1)
+                .get(),
+        ]);
 
-                let sellerProfile = null;
-                if (!sellerSnap.empty) {
-                    const tempSellerProfile = sellerSnap.docs[0].data();
-                    sellerProfile = await enforceSubscriptionStatus(tempSellerProfile, currentUser.uid);
-                }
+        if (!userDoc.exists) {
+            throw new Error("User not found");
+        }
 
-                return res.status(200).json({
-                    success: true,
-                    user: {
-                        ...userData,
-                        ...(sellerProfile ? { seller_profile: sellerProfile } : {}),
-                    },
-                });
-            } catch (err: any) {
-                console.error("getUserDetails error:", err);
-                return res.status(500).json({ error: err.message });
-            }
-        });
-    });
+        const userData = userDoc.data();
+
+        let sellerProfile = null;
+        if (!sellerSnap.empty) {
+            const tempSellerProfile = sellerSnap.docs[0].data();
+            sellerProfile = await enforceSubscriptionStatus(tempSellerProfile, auth.uid);
+        }
+
+        const result = {
+            user: {
+                ...userData,
+                ...(sellerProfile ? { seller_profile: sellerProfile } : {}),
+            },
+        };
+
+        // Cache for 10 minutes
+        cacheManager.set(cacheKey, result, 600);
+
+        return result;
+    },
+    { region: "asia-south1", requireAuth: true }
+);

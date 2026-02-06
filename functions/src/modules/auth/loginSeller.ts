@@ -1,10 +1,7 @@
-import * as functions from "firebase-functions";
-import { auth, db } from "../../config/firebase";
-import cors from "cors";
+import { createCallableFunction, validators, validationErrors } from "../../utils/callable";
+import { auth as firebaseAuth, db } from "../../config/firebase";
 
-const corsHandler = cors({ origin: true });
-
-interface LoginUserData {
+interface LoginSellerRequest {
   email: string;
   password: string;
   role: "seller" | "user";
@@ -18,100 +15,96 @@ interface FirebaseAuthResponse {
   expiresIn: string;
 }
 
-export const loginSeller = functions.https.onRequest(
-  { secrets: ["API_KEY"], region: "asia-south1" },
-  (req, res) => {
-    corsHandler(req, res, async () => {
-      if (req.method !== "POST") {
-        return res.status(405).json({ error: "Method not allowed" });
+export const loginSeller = createCallableFunction<LoginSellerRequest, any>(
+  async (data, auth, context) => {
+    const { email, password, role } = data;
+
+    if (!email || !password || !role) {
+      throw new Error("Email, password and role are required");
+    }
+
+    if (!validators.isEmail(email)) {
+      throw new Error(validationErrors.invalidEmail);
+    }
+
+    if (!["seller", "user"].includes(role)) {
+      throw new Error("Role must be 'seller' or 'user'");
+    }
+
+    try {
+      const FIREBASE_API_KEY = process.env.API_KEY;
+      if (!FIREBASE_API_KEY) throw new Error("Missing Firebase API Key");
+
+      // 1️⃣ Get user by email
+      const userRecord = await firebaseAuth.getUserByEmail(email).catch(() => null);
+      if (!userRecord) {
+        throw new Error("Account not found");
       }
 
-      const { email, password, role } = req.body as LoginUserData;
-
-      if (!email || !password || !role) {
-        return res
-          .status(400)
-          .json({ error: "Email, password and role are required" });
+      // 2️⃣ Get Firestore user document
+      const userDoc = await db.collection("users").doc(userRecord.uid).get();
+      if (!userDoc.exists) {
+        throw new Error("User data missing");
       }
 
-      try {
-        const FIREBASE_API_KEY = process.env.API_KEY;
-        if (!FIREBASE_API_KEY) throw new Error("Missing Firebase API Key");
+      const userData = userDoc.data();
 
-        // 1️⃣ Get user by email
-        const userRecord = await auth.getUserByEmail(email).catch(() => null);
-        if (!userRecord) {
-          return res.status(404).json({ error: "Account not found" });
-        }
-
-        // 2️⃣ Get Firestore user document
-        const userDoc = await db.collection("users").doc(userRecord.uid).get();
-        if (!userDoc.exists) {
-          return res.status(404).json({ error: "User data missing" });
-        }
-
-        const userData = userDoc.data();
-
-        // 3️⃣ Verify role
-        if (userData?.role !== role) {
-          return res
-            .status(403)
-            .json({ error: "Invalid account type for this login" });
-        }
-
-        // 4️⃣ Verify approved/verified status
-        if (!userData?.verified || userData?.verified === false) {
-          return res.status(403).json({
-            error:
-              "Your account is pending verification. Please wait for approval.",
-          });
-        }
-
-        if (!userData?.email_verified || userData?.email_verified === false) {
-          return res.status(403).json({
-            error:
-              "Please verify your email.",
-          });
-        }
-
-        // 5️⃣ Login via Firebase REST API (password check)
-        const isEmulator = !!process.env.FIREBASE_AUTH_EMULATOR_HOST;
-        console.log("isEmulator:", isEmulator);
-
-        const signInUrl = isEmulator
-          ? `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`
-          : `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
-
-        const response = await fetch(signInUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            password,
-            returnSecureToken: true,
-          }),
-        });
-
-        const data = (await response.json()) as FirebaseAuthResponse;
-
-        if (data.error) {
-          return res.status(401).json({ error: "Invalid email or password" });
-        }
-
-        // 6️⃣ Return final login response
-        return res.status(200).json({
-          success: true,
-          uid: data.localId,
-          idToken: data.idToken,
-          refreshToken: data.refreshToken,
-          expiresIn: data.expiresIn,
-        });
-      } catch (err: any) {
-        console.error("loginSeller error:", err);
-        return res
-          .status(500)
-          .json({ error: "Login failed. Try again later." });
+      // 3️⃣ Verify role
+      if (userData?.role !== role) {
+        throw new Error("Invalid account type for this login");
       }
-    });
+
+      // 4️⃣ Verify approved/verified status
+      if (!userData?.verified || userData?.verified === false) {
+        throw new Error("Your account is pending verification. Please wait for approval.");
+      }
+
+      if (!userData?.email_verified || userData?.email_verified === false) {
+        throw new Error("Please verify your email.");
+      }
+
+      // 5️⃣ Login via Firebase REST API (password check)
+      const isEmulator = !!process.env.FIREBASE_AUTH_EMULATOR_HOST;
+      const signInUrl = isEmulator
+        ? `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`
+        : `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
+
+      const response = await fetch(signInUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      });
+
+      const authResponse = (await response.json()) as FirebaseAuthResponse;
+
+      if (authResponse.error) {
+        throw new Error("Invalid email or password");
+      }
+
+      // 6️⃣ Return final login response
+      return {
+        success: true,
+        uid: authResponse.localId,
+        idToken: authResponse.idToken,
+        refreshToken: authResponse.refreshToken,
+        expiresIn: authResponse.expiresIn,
+        userData: {
+          email: userData?.email,
+          name: userData?.name,
+          role: userData?.role,
+        }
+      };
+    } catch (error: any) {
+      console.error("loginSeller error:", error);
+      throw error;
+    }
+  },
+  { 
+    region: "asia-south1", 
+    requireAuth: false 
   }
 );

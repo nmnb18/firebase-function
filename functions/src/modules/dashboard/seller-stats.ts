@@ -1,38 +1,23 @@
 import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
-
-const corsHandler = cors({ origin: true });
+import { createCallableFunction } from "../../utils/callable";
 
 /**
  * Seller dashboard stats
- * - requires Authorization Bearer token (authenticateUser) which should set req.currentUser
- * - returns:
- *   {
- *     total_users: number,        // distinct users who scanned this seller (based on scans collection)
- *     active_qr_codes: number,    // qr_codes where seller_id == sellerId and active == true
- *     total_scanned: number,      // total scans for this seller
- *     total_points_issued: number,// sum of points awarded for scans for this seller
- *     total_redemptions: number,  // count of redemptions for this seller (if you use 'redemptions' collection)
- *     seller_id: string,
- *     seller_name?: string
- *   }
+ * - requires authenticated user (auth.uid from context)
+ * - returns seller statistics including users, scans, points, redemptions
  */
-// Update the sellerStats function to include redemption stats
 
-export const sellerStats = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET") {
-                    return res.status(405).json({ error: "Only GET allowed" });
-                }
+interface SellerStatsInput {}
+interface SellerStatsOutput {
+  success: boolean;
+  data: any;
+}
 
-                const currentUser = await authenticateUser(req.headers.authorization);
-                if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
+export const sellerStats = createCallableFunction<SellerStatsInput, SellerStatsOutput>(
+  async (data, auth, context) => {
+    try {
+      const currentUser = { uid: auth!.uid };
 
                 // Get seller profile
                 const profilesRef = db.collection('seller_profiles');
@@ -42,7 +27,7 @@ export const sellerStats = functions.https.onRequest(
                     .get();
 
                 if (profileQuery.empty) {
-                    return res.status(404).json({ error: "Seller profile not found" });
+                    throw new functions.https.HttpsError('not-found', 'Seller profile not found');
                 }
 
                 const profileDoc = profileQuery.docs[0];
@@ -208,10 +193,14 @@ export const sellerStats = functions.https.onRequest(
                 results.subscription_tier = sellerData?.subscription?.tier || "free";
                 results.locked_features = (results.subscription_tier === "free");
 
-                return res.status(200).json({ success: true, data: results });
-            } catch (error: any) {
-                console.error("sellerStats error:", error);
-                return res.status(500).json({ error: error.message || "Server error" });
-            }
-        });
-    });
+        return { success: true, data: results };
+    } catch (error: any) {
+      console.error("sellerStats error:", error);
+      throw new functions.https.HttpsError('internal', error.message || 'Server error');
+    }
+  },
+  {
+    region: 'asia-south1',
+    requireAuth: true
+  }
+);

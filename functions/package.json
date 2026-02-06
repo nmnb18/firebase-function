@@ -8,7 +8,14 @@
     "serve": "npm run build && firebase emulators:start --only functions,auth,firestore,ui,storage",
     "shell": "firebase functions:shell",
     "start": "npm run serve",
-    "deploy": "npm run build && firebase deploy --only functions"
+    "deploy": "npm run build && firebase deploy --only functions",
+    "optimize:build": "node scripts/build-deploy.js build",
+    "optimize:test": "node scripts/build-deploy.js test",
+    "optimize:deploy": "node scripts/build-deploy.js deploy",
+    "optimize:analyze": "node scripts/build-deploy.js analyze",
+    "optimize:status": "node scripts/build-deploy.js status",
+    "optimize:tips": "node scripts/build-deploy.js tips",
+    "optimize": "node scripts/build-deploy.js"
   },
   "engines": {
     "node": "20"

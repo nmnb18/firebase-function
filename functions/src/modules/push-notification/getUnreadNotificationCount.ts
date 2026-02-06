@@ -1,33 +1,36 @@
 import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
+import { createCallableFunction } from "../../utils/callable";
 
-const corsHandler = cors({ origin: true });
+interface GetUnreadNotificationCountInput {}
+interface GetUnreadNotificationCountOutput {
+  success: boolean;
+  count: number;
+}
 
-export const getUnreadNotificationCount = functions.https.onRequest(
-    { region: "asia-south1" },
-    async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                const user = await authenticateUser(req.headers.authorization);
-                if (!user?.uid) return res.status(401).json({ error: "Unauthorized" });
+export const getUnreadNotificationCount = createCallableFunction<GetUnreadNotificationCountInput, GetUnreadNotificationCountOutput>(
+  async (data, auth, context) => {
+    try {
+      const userId = auth!.uid;
 
-                const snap = await db
-                    .collection("user_notifications")
-                    .doc(user.uid)
-                    .collection("notifications")
-                    .where("read", "==", false)
-                    .get();
+      const snap = await db
+        .collection("user_notifications")
+        .doc(userId)
+        .collection("notifications")
+        .where("read", "==", false)
+        .get();
 
-                return res.json({
-                    success: true,
-                    count: snap.size,
-                });
-            } catch (err: any) {
-                console.error("Unread count error", err);
-                return res.status(500).json({ error: err.message });
-            }
-        });
+      return {
+        success: true,
+        count: snap.size,
+      };
+    } catch (err: any) {
+      console.error("Unread count error", err);
+      throw new functions.https.HttpsError('internal', err.message);
     }
+  },
+  {
+    region: 'asia-south1',
+    requireAuth: true
+  }
 );

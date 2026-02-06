@@ -1,36 +1,40 @@
 import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
-import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
+import { createCallableFunction } from "../../utils/callable";
 
-const corsHandler = cors({ origin: true });
-export const markNotificationsRead = functions.https.onRequest(
-    { region: "asia-south1" },
-    async (req, res) => {
-        corsHandler(req, res, async () => {
-            try {
-                const user = await authenticateUser(req.headers.authorization);
-                if (!user?.uid) return res.status(401).json({ error: "Unauthorized" });
+interface MarkNotificationsReadInput {
+  notificationIds: string[];
+}
+interface MarkNotificationsReadOutput {
+  success: boolean;
+}
 
-                const { notificationIds } = req.body;
+export const markNotificationsRead = createCallableFunction<MarkNotificationsReadInput, MarkNotificationsReadOutput>(
+  async (data, auth, context) => {
+    try {
+      const userId = auth!.uid;
+      const { notificationIds } = data;
 
-                const batch = db.batch();
-                const baseRef = db
-                    .collection("user_notifications")
-                    .doc(user.uid)
-                    .collection("notifications");
+      const batch = db.batch();
+      const baseRef = db
+        .collection("user_notifications")
+        .doc(userId)
+        .collection("notifications");
 
-                notificationIds.forEach((id: string) => {
-                    batch.update(baseRef.doc(id), { read: true });
-                });
+      notificationIds.forEach((id: string) => {
+        batch.update(baseRef.doc(id), { read: true });
+      });
 
-                await batch.commit();
+      await batch.commit();
 
-                return res.json({ success: true });
-            } catch (err: any) {
-                console.error("Mark read error", err);
-                return res.status(500).json({ error: err.message });
-            }
-        });
+      return { success: true };
+    } catch (err: any) {
+      console.error("Mark read error", err);
+      throw new functions.https.HttpsError('internal', err.message);
     }
+  },
+  {
+    region: 'asia-south1',
+    requireAuth: true
+  }
 );

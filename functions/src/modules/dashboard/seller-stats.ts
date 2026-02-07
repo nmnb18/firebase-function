@@ -5,208 +5,201 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-/**
- * Seller dashboard stats
- * - requires Authorization Bearer token (authenticateUser) which should set req.currentUser
- * - returns:
- *   {
- *     total_users: number,        // distinct users who scanned this seller (based on scans collection)
- *     active_qr_codes: number,    // qr_codes where seller_id == sellerId and active == true
- *     total_scanned: number,      // total scans for this seller
- *     total_points_issued: number,// sum of points awarded for scans for this seller
- *     total_redemptions: number,  // count of redemptions for this seller (if you use 'redemptions' collection)
- *     seller_id: string,
- *     seller_name?: string
- *   }
- */
-// Update the sellerStats function to include redemption stats
-
-export const sellerStats = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+export const sellerStats = functions
+    .https.onRequest({ region: "asia-south1", minInstances: 1 }, async (req, res) => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
                     return res.status(405).json({ error: "Only GET allowed" });
                 }
 
+                // Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
-                if (!currentUser || !currentUser.uid) {
+                if (!currentUser?.uid) {
                     return res.status(401).json({ error: "Unauthorized" });
                 }
 
                 // Get seller profile
-                const profilesRef = db.collection('seller_profiles');
-                const profileQuery = await profilesRef
-                    .where('user_id', '==', currentUser.uid)
+                const profileSnap = await db
+                    .collection("seller_profiles")
+                    .where("user_id", "==", currentUser.uid)
                     .limit(1)
                     .get();
 
-                if (profileQuery.empty) {
+                if (profileSnap.empty) {
                     return res.status(404).json({ error: "Seller profile not found" });
                 }
 
-                const profileDoc = profileQuery.docs[0];
+                const profileDoc = profileSnap.docs[0];
                 const sellerId = profileDoc.id;
                 const sellerData = profileDoc.data();
 
                 const results: any = {
+                    seller_id: sellerId,
+                    seller_name: sellerData?.business.shop_name ?? null,
                     total_users: 0,
                     active_qr_codes: 0,
+                    total_qrs: 0,
                     total_scanned: 0,
                     total_points_issued: 0,
                     total_redemptions: 0,
-                    total_points_redeemed: 0,  // NEW: Total points redeemed
-                    pending_redemptions: 0,    // NEW: Pending redemptions count
-                    redemption_rate: 0,        // NEW: Redemption percentage
-                    seller_id: sellerId,
-                    seller_name: undefined
+                    total_points_redeemed: 0,
+                    pending_redemptions: 0,
+                    redemption_rate: 0,
+                    redeemed_customers: 0,
+                    last_five_scans: [],
+                    last_five_redemptions: [],
+                    today: { scans: 0, points_issued: 0, redemptions: 0, points_redeemed: 0 },
+                    subscription_tier: sellerData?.subscription?.tier || "free",
+                    locked_features: sellerData?.subscription?.tier === "free",
                 };
 
-                results.seller_name = sellerData?.business.shop_name ?? null;
+                // Run independent queries in parallel
+                const [
+                    qrActiveSnap,
+                    qrTotalCountSnap,
+                    txSnap,
+                    redemptionsSnap,
+                    redeemedSnap,
+                    lastFiveScansSnap,
+                    lastFiveRedemptionsSnap,
+                    todayScansSnap,
+                    todayRedemptionsSnap,
+                ] = await Promise.all([
+                    // Active QR codes
+                    db.collection("qr_codes")
+                        .where("seller_id", "==", sellerId)
+                        .where("status", "==", "active")
+                        .get(),
+                    // Total QR codes count
+                    db.collection("qr_codes")
+                        .where("seller_id", "==", sellerId)
+                        .count()
+                        .get(),
+                    // All transactions of type "earn"
+                    db.collection("transactions")
+                        .where("seller_id", "==", sellerId)
+                        .where("transaction_type", "==", "earn")
+                        .get(),
+                    // All redemptions
+                    db.collection("redemptions")
+                        .where("seller_id", "==", sellerId)
+                        .get(),
+                    // All redeemed redemptions
+                    db.collection("redemptions")
+                        .where("seller_id", "==", sellerId)
+                        .where("status", "==", "redeemed")
+                        .get(),
+                    // Last 5 scans
+                    db.collection("transactions")
+                        .where("seller_id", "==", sellerId)
+                        .where("transaction_type", "==", "earn")
+                        .orderBy("timestamp", "desc")
+                        .limit(5)
+                        .get(),
+                    // Last 5 redemptions
+                    db.collection("redemptions")
+                        .where("seller_id", "==", sellerId)
+                        .orderBy("created_at", "desc")
+                        .limit(5)
+                        .get(),
+                    // Today’s scans
+                    (() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return db.collection("transactions")
+                            .where("seller_id", "==", sellerId)
+                            .where("transaction_type", "==", "earn")
+                            .where("timestamp", ">=", today)
+                            .get();
+                    })(),
+                    // Today’s redemptions
+                    (() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return db.collection("redemptions")
+                            .where("seller_id", "==", sellerId)
+                            .where("status", "==", "redeemed")
+                            .where("redeemed_at", ">=", today)
+                            .get();
+                    })(),
+                ]);
 
-                // 1) Active QR Codes
-                const qrQ = await db.collection("qr_codes")
-                    .where("seller_id", "==", sellerId)
-                    .where("status", "==", "active")
-                    .get();
-                results.active_qr_codes = qrQ.size;
-                results.total_qrs = await db.collection("qr_codes")
-                    .where("seller_id", "==", sellerId)
-                    .count()
-                    .get()
-                    .then(snap => snap.data().count);
+                // QR codes stats
+                results.active_qr_codes = qrActiveSnap.size;
+                results.total_qrs = qrTotalCountSnap.data()?.count || 0;
 
-                // 2) Transactions (earn) for total scans and points issued
-                const txQ = await db.collection("transactions")
-                    .where("seller_id", "==", sellerId)
-                    .where("transaction_type", "==", "earn")
-                    .get();
-
-                results.total_scanned = txQ.size;
-
+                // Transactions stats
                 let pointsSum = 0;
                 const userSet = new Set<string>();
-
-                txQ.forEach((doc) => {
+                txSnap.forEach(doc => {
                     const d = doc.data();
-                    if (d?.points) pointsSum += Number(d.points) || 0;
-                    if (d?.user_id) userSet.add(d.user_id);
+                    pointsSum += Number(d.points || 0);
+                    if (d.user_id) userSet.add(d.user_id);
                 });
-
                 results.total_points_issued = pointsSum;
+                results.total_scanned = txSnap.size;
                 results.total_users = userSet.size;
 
-                // 3) Redemptions - NEW LOGIC
-                const redemptionsQuery = await db.collection("redemptions")
-                    .where("seller_id", "==", sellerId)
-                    .get();
-
+                // Redemptions stats
                 let totalRedemptions = 0;
                 let pendingRedemptions = 0;
                 let totalPointsRedeemed = 0;
+                const redeemedCustomersSet = new Set<string>();
 
-                redemptionsQuery.forEach((doc) => {
-                    const redemption = doc.data();
-                    if (redemption.status === "redeemed") {
+                redemptionsSnap.forEach(doc => {
+                    const r = doc.data();
+                    if (r.status === "redeemed") {
                         totalRedemptions++;
-                        totalPointsRedeemed += Number(redemption.points || 0);
-                    } else if (redemption.status === "pending") {
+                        totalPointsRedeemed += Number(r.points || 0);
+                    } else if (r.status === "pending") {
                         pendingRedemptions++;
                     }
                 });
 
-                results.total_redemptions = totalRedemptions;
-                results.total_points_redeemed = totalPointsRedeemed;
-                results.pending_redemptions = pendingRedemptions;
-
-                // Calculate redemption rate (redeemed customers / earned customers)
-                const redeemedCustomersSet = new Set<string>();
-                const redeemedRedemptions = await db.collection("redemptions")
-                    .where("seller_id", "==", sellerId)
-                    .where("status", "==", "redeemed")
-                    .get();
-
-                redeemedRedemptions.forEach(doc => {
-                    const redemption = doc.data();
-                    if (redemption.user_id) {
-                        redeemedCustomersSet.add(redemption.user_id);
-                    }
+                redeemedSnap.forEach(doc => {
+                    const r = doc.data();
+                    if (r.user_id) redeemedCustomersSet.add(r.user_id);
                 });
 
+                results.total_redemptions = totalRedemptions;
+                results.pending_redemptions = pendingRedemptions;
+                results.total_points_redeemed = totalPointsRedeemed;
                 results.redeemed_customers = redeemedCustomersSet.size;
-                results.redemption_rate = results.total_users > 0
+                results.redemption_rate = results.total_users
                     ? Math.round((redeemedCustomersSet.size / results.total_users) * 100)
                     : 0;
 
-                // 4) LAST 5 SCANS
-                const lastFiveQ = await db.collection("transactions")
-                    .where("seller_id", "==", sellerId)
-                    .where("transaction_type", "==", "earn")
-                    .orderBy("timestamp", "desc")
-                    .limit(5)
-                    .get();
-
-                results.last_five_scans = lastFiveQ.docs.map(doc => ({
+                // Last 5 scans
+                results.last_five_scans = lastFiveScansSnap.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data(),
-                    timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp
+                    timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
                 }));
 
-                // 5) LAST 5 REDEMPTIONS - NEW
-                const lastFiveRedemptions = await db.collection("redemptions")
-                    .where("seller_id", "==", sellerId)
-                    .orderBy("created_at", "desc")
-                    .limit(5)
-                    .get();
-
-                results.last_five_redemptions = lastFiveRedemptions.docs.map(doc => ({
+                // Last 5 redemptions
+                results.last_five_redemptions = lastFiveRedemptionsSnap.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data(),
                     created_at: doc.data().created_at?.toDate?.() || doc.data().created_at,
-                    redeemed_at: doc.data().redeemed_at?.toDate?.() || doc.data().redeemed_at
+                    redeemed_at: doc.data().redeemed_at?.toDate?.() || doc.data().redeemed_at,
                 }));
 
-                // 6) TODAY'S STATS
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-
-                const todayScansQ = await db.collection("transactions")
-                    .where("seller_id", "==", sellerId)
-                    .where("transaction_type", "==", "earn")
-                    .where("timestamp", ">=", today)
-                    .get();
-
+                // Today stats
                 let todayPoints = 0;
-                let todayScans = todayScansQ.size;
-
-                todayScansQ.forEach(doc => {
-                    const d = doc.data();
-                    todayPoints += Number(d.points || 0);
+                todayScansSnap.forEach(doc => {
+                    todayPoints += Number(doc.data().points || 0);
                 });
-
-                // TODAY'S REDEMPTIONS - NEW
-                const todayRedemptionsQ = await db.collection("redemptions")
-                    .where("seller_id", "==", sellerId)
-                    .where("status", "==", "redeemed")
-                    .where("redeemed_at", ">=", today)
-                    .get();
-
                 let todayRedeemedPoints = 0;
-                todayRedemptionsQ.forEach(doc => {
-                    const redemption = doc.data();
-                    todayRedeemedPoints += Number(redemption.points || 0);
+                todayRedemptionsSnap.forEach(doc => {
+                    todayRedeemedPoints += Number(doc.data().points || 0);
                 });
-
                 results.today = {
-                    scans: todayScans,
+                    scans: todayScansSnap.size,
                     points_issued: todayPoints,
-                    redemptions: todayRedemptionsQ.size,
-                    points_redeemed: todayRedeemedPoints
+                    redemptions: todayRedemptionsSnap.size,
+                    points_redeemed: todayRedeemedPoints,
                 };
-
-                // 7) SUBSCRIPTION INFO
-                results.subscription_tier = sellerData?.subscription?.tier || "free";
-                results.locked_features = (results.subscription_tier === "free");
 
                 return res.status(200).json({ success: true, data: results });
             } catch (error: any) {

@@ -78,12 +78,12 @@ export const loginUser = createCallableFunction<LoginUserData, any>(
                 throw new Error("Invalid email or password");
             }
 
+            const customToken = await firebaseAuth.createCustomToken(userRecord.uid);
+
             // 5️⃣ Return final login response
             return {
                 uid: authResponse.localId,
-                idToken: authResponse.idToken,
-                refreshToken: authResponse.refreshToken,
-                expiresIn: authResponse.expiresIn,
+                customToken,
                 userData: {
                     email: userData?.email,
                     name: userData?.name,

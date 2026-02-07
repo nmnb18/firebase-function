@@ -38,7 +38,7 @@ export function createCallableFunction<InputType = any, OutputType = any>(
         fnOptions.secrets = options.secrets;
     }
 
-    return functions.https.onCall(fnOptions, async (data: any, context: any) => {
+    return functions.https.onCall(fnOptions, async (request: any, context: any) => {
         try {
             // Check authentication if required
             if (options?.requireAuth !== false && !context.auth?.uid) {
@@ -46,7 +46,7 @@ export function createCallableFunction<InputType = any, OutputType = any>(
             }
 
             const auth = context.auth ? { uid: context.auth.uid, email: context.auth.email } : undefined;
-            const result = await handler(data as InputType, auth, context);
+            const result = await handler(request?.data as InputType, auth, context);
             return successResponse(result);
         } catch (error: any) {
             console.error("Callable function error:", error);

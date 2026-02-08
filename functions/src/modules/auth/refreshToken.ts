@@ -12,7 +12,7 @@ type AuthResponse = {
 }
 
 export const refreshToken = functions.https.onRequest(
-    { secrets: ["API_KEY"], region: "asia-south1", },
+    { secrets: ["API_KEY"], region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {

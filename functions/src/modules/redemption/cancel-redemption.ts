@@ -7,7 +7,7 @@ import { Redemption } from "../../types/redemption";
 const corsHandler = cors({ origin: true });
 
 export const cancelRedemption = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Method not allowed" });

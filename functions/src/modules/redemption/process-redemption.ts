@@ -9,7 +9,7 @@ import pushService, { NotificationChannel, NotificationType } from "../../servic
 const corsHandler = cors({ origin: true });
 
 export const processRedemption = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -109,57 +109,54 @@ export const processRedemption = functions.https.onRequest(
                     });
                 }
 
-                // 5. Update redemption status
-                await redemptionRef.update({
-                    status: "redeemed",
-                    redeemed_at: adminRef.firestore.FieldValue.serverTimestamp(),
-                    updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
-                    metadata: {
-                        ...redemption.metadata,
-                        seller_notes: seller_notes || ""
-                    }
-                });
-
-                // 6. Create transaction record
-                await db.collection("transactions").add({
-                    user_id: redemption.user_id,
-                    seller_id: redemption.seller_id,
-                    customer_name: redemption.user_name,
-                    seller_name: redemption.seller_shop_name,
-                    points: -Number(redemption.points), // Negative for redemption
-                    transaction_type: "redeem",
-                    redemption_id: redemption_id,
-                    timestamp: adminRef.firestore.FieldValue.serverTimestamp(),
-                    description: `Redeemed ${redemption.points} points via QR`
-                });
-
-                // 7. Update seller stats
+                // Parallel writes: redemption update + transaction + seller stats update
                 const sellerRef = db.collection("seller_profiles").doc(redemption.seller_id);
-                await sellerRef.update({
-                    "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(Number(redemption.points)),
-                    "stats.total_redemptions": adminRef.firestore.FieldValue.increment(1)
-                });
+                await Promise.all([
+                    redemptionRef.update({
+                        status: "redeemed",
+                        redeemed_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                        updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                        metadata: {
+                            ...redemption.metadata,
+                            seller_notes: seller_notes || ""
+                        }
+                    }),
+                    db.collection("transactions").add({
+                        user_id: redemption.user_id,
+                        seller_id: redemption.seller_id,
+                        customer_name: redemption.user_name,
+                        seller_name: redemption.seller_shop_name,
+                        points: -Number(redemption.points),
+                        transaction_type: "redeem",
+                        redemption_id: redemption_id,
+                        timestamp: adminRef.firestore.FieldValue.serverTimestamp(),
+                        description: `Redeemed ${redemption.points} points via QR`
+                    }),
+                    sellerRef.update({
+                        "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(Number(redemption.points)),
+                        "stats.total_redemptions": adminRef.firestore.FieldValue.increment(1)
+                    })
+                ]);
 
                 // 8. Release point hold
                 await releasePointHold(redemption_id);
 
+                // Parallel: Save notification + get push tokens
+                const [, tokenSnapPush] = await Promise.all([
+                    saveNotification(
+                        redemption.user_id,
+                        "⭐ Points Redeemed!",
+                        `You redeeems ${redemption.points} points at ${redemption.seller_shop_name}`,
+                        {
+                            type: NotificationType.REDEMPTION,
+                            screen: "/(drawer)/redeem/redeem-home",
+                            sellerId: redemption.seller_id,
+                            points: redemption.points,
+                        }
+                    ),
+                    db.collection("push_tokens").where("user_id", "==", redemption.user_id).get()
+                ]);
 
-                // ----------------------------------
-                // Send Push Notification
-                // ----------------------------------
-                await saveNotification(
-                    redemption.user_id,
-                    "⭐ Points Redeemed!",
-                    `You redeeems ${redemption.points} points at ${redemption.seller_shop_name}`,
-                    {
-                        type: NotificationType.REDEMPTION,
-                        screen: "/(drawer)/redeem/redeem-home",
-                        sellerId: redemption.seller_id,
-                        points: redemption.points,
-                    }
-                );
-
-                const tokenSnapPush = await db.collection("push_tokens").where("user_id", "==", redemption.user_id).get();
                 const userTokens = tokenSnapPush.docs.map(d => d.data().token);
 
                 if (userTokens.length > 0) {

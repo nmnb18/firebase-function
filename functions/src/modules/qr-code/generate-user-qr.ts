@@ -8,7 +8,7 @@ import { generateQRBase64 } from "../../utils/qr-helper";
 const corsHandler = cors({ origin: true });
 
 export const generateUserQR = functions.https.onRequest(
-    { region: "asia-south1" },
+    { region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             try {

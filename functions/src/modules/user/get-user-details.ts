@@ -2,11 +2,13 @@ import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { createCache } from "../../utils/cache";
 
 const corsHandler = cors({ origin: true });
+const cache = createCache();
 
 export const getUserDetails = functions.https.onRequest(
-    { region: 'asia-south1' }, (req, res) => {
+    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
         corsHandler(req, res, async () => {
 
             if (req.method !== "GET") {
@@ -21,6 +23,13 @@ export const getUserDetails = functions.https.onRequest(
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
                     return res.status(401).json({ error: "Unauthorized" });
+                }
+
+                // Check cache (90s TTL for user details)
+                const cacheKey = `user_details:${uid}`;
+                const cached = cache.get<any>(cacheKey);
+                if (cached) {
+                    return res.status(200).json(cached);
                 }
 
                 // GET MAIN USER DOC
@@ -43,13 +52,18 @@ export const getUserDetails = functions.https.onRequest(
                     customerProfile = customerSnap.docs[0].data();
                 }
 
-                return res.status(200).json({
+                const responseData = {
                     success: true,
                     user: {
                         ...userData,
                         ...(customerProfile ? { customer_profile: customerProfile } : {}),
                     },
-                });
+                };
+
+                // Cache result (90s TTL)
+                cache.set(cacheKey, responseData, 90000);
+
+                return res.status(200).json(responseData);
 
             } catch (error: any) {
                 console.error("getUserDetails error:", error);

@@ -3,11 +3,12 @@ import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
+import { createCache } from "../../utils/cache";
 
 const corsHandler = cors({ origin: true });
-
+const cache = createCache();
 export const getUserRedemptions = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -15,27 +16,23 @@ export const getUserRedemptions = functions.https.onRequest(
 
             try {
                 const currentUser = await authenticateUser(req.headers.authorization);
-
                 // Get query parameters
                 const { seller_id } = req.query;
-
+                const cacheKey = `user_redemptions:${currentUser.uid}_${seller_id || 'all'}`;
+                const cached = cache.get<any>(cacheKey);
+                if (cached) {
+                    return res.status(200).json(cached);
+                }
                 // Build base query - NO LIMIT
                 let query: any = db.collection("redemptions")
                     .where("user_id", "==", currentUser.uid)
                     .orderBy("created_at", "desc");
-
-                // Add seller filter if provided
                 if (seller_id) {
                     query = query.where("seller_id", "==", seller_id);
                 }
-
-                // Execute query - NO LIMIT
                 const snapshot = await query.get();
-
-                // Transform documents
                 const redemptions = snapshot.docs.map((doc: any) => {
                     const data = doc.data();
-
                     return {
                         id: doc.id,
                         redemption_id: data.redemption_id,
@@ -56,8 +53,6 @@ export const getUserRedemptions = functions.https.onRequest(
                         metadata: data.metadata || {}
                     };
                 });
-
-                // Calculate stats
                 const stats = {
                     total: redemptions.length,
                     pending: redemptions.filter((r: { status: string; }) => r.status === 'pending').length,
@@ -72,13 +67,9 @@ export const getUserRedemptions = functions.https.onRequest(
                         .filter((r: { status: string; }) => r.status === 'pending')
                         .reduce((sum: any, r: { points: any; }) => sum + (r.points || 0), 0),
                 };
-
-                return res.status(200).json({
-                    success: true,
-                    redemptions: redemptions,
-                    count: redemptions.length,
-                    stats: stats
-                });
+                const responseData = { success: true, redemptions, count: redemptions.length, stats };
+                cache.set(cacheKey, responseData, 30000);
+                return res.status(200).json(responseData);
 
             } catch (error: any) {
                 console.error("Get user redemptions error:", error);

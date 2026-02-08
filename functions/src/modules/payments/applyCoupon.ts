@@ -6,8 +6,10 @@ import { PLAN_CONFIG } from "../../utils/constant";
 
 const corsHandler = cors({ origin: true });
 
+// In-memory cache for coupon validation (keyed by code+planId+sellerId, 60s)
+const couponCache: { [key: string]: { data: any, expires: number } } = {};
 export const applyCoupon = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', minInstances: 1, memory: '256MiB', timeoutSeconds: 20 }, async (req: any, res: any) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Only POST allowed" });
@@ -19,16 +21,18 @@ export const applyCoupon = functions.https.onRequest(
                 if (!currentUser || !currentUser.uid) {
                     return res.status(401).json({ error: "Unauthorized" });
                 }
-
                 const { couponCode, planId, sellerId } = req.body;
-
                 if (!couponCode || !planId || !sellerId) {
                     return res.status(400).json({
                         success: false,
                         message: "Missing required fields"
                     });
                 }
-
+                // Caching
+                const cacheKey = `${couponCode}_${planId}_${sellerId}`;
+                if (couponCache[cacheKey] && couponCache[cacheKey].expires > Date.now()) {
+                    return res.status(200).json(couponCache[cacheKey].data);
+                }
                 // Validate plan
                 const plan = PLAN_CONFIG[planId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
@@ -37,9 +41,7 @@ export const applyCoupon = functions.https.onRequest(
                         message: "Invalid plan selected"
                     });
                 }
-
                 const planPrice = plan.price;
-
                 // Find active coupon
                 const couponsSnapshot = await db
                     .collection("coupons")
@@ -49,14 +51,12 @@ export const applyCoupon = functions.https.onRequest(
                     .where("validUntil", ">=", adminRef.firestore.Timestamp.now())
                     .limit(1)
                     .get();
-
                 if (couponsSnapshot.empty) {
                     return res.status(400).json({
                         success: false,
                         message: "Invalid or expired coupon code"
                     });
                 }
-
                 const couponDoc = couponsSnapshot.docs[0];
                 const coupon = couponDoc.data();
 

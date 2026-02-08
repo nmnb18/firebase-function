@@ -6,7 +6,7 @@ import { authenticateUser } from "../../middleware/auth";
 const corsHandler = cors({ origin: true });
 
 export const sellerAdvancedAnalytics = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 60, memory: '512MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
@@ -18,12 +18,32 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     return res.status(401).json({ error: "Unauthorized" });
                 }
 
-                // Get seller profile
-                const profilesRef = db.collection("seller_profiles");
-                const profileQuery = await profilesRef
-                    .where("user_id", "==", currentUser.uid)
-                    .limit(1)
-                    .get();
+                // Time windows
+                const now = new Date();
+                const last30 = new Date();
+                last30.setDate(now.getDate() - 30);
+                last30.setHours(0, 0, 0, 0);
+
+                const last7 = new Date();
+                last7.setDate(now.getDate() - 7);
+                last7.setHours(0, 0, 0, 0);
+
+                // Parallel: Get seller profile + all transactions + all redemptions + all points
+                const [profileQuery, txSnapshot, redSnapshot, pointsSnapshot] = await Promise.all([
+                    db.collection("seller_profiles")
+                        .where("user_id", "==", currentUser.uid)
+                        .limit(1)
+                        .get(),
+                    db.collection("transactions")
+                        .where("transaction_type", "==", "earn")
+                        .where("timestamp", ">=", last30)
+                        .get(),
+                    db.collection("redemptions")
+                        .where("created_at", ">=", last30)
+                        .get(),
+                    db.collection("points")
+                        .get()
+                ]);
 
                 if (profileQuery.empty) {
                     return res.status(404).json({ error: "Seller profile not found" });
@@ -41,32 +61,10 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     });
                 }
 
-                // Time windows
-                const now = new Date();
-                const last30 = new Date();
-                last30.setDate(now.getDate() - 30);
-                last30.setHours(0, 0, 0, 0);
-
-                const last7 = new Date();
-                last7.setDate(now.getDate() - 7);
-                last7.setHours(0, 0, 0, 0);
-
-                // ----- A: BASE DATA QUERIES -----
-
-                // Transactions (earn only) LAST 30 DAYS
-                const txQ = await db
-                    .collection("transactions")
-                    .where("seller_id", "==", sellerId)
-                    .where("transaction_type", "==", "earn")
-                    .where("timestamp", ">=", last30)
-                    .get();
-
-                // Redemptions LAST 30 DAYS - UPDATED
-                const redQ = await db
-                    .collection("redemptions")
-                    .where("seller_id", "==", sellerId)
-                    .where("created_at", ">=", last30)
-                    .get();
+                // Filter all documents by seller_id
+                const txDocs = txSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
+                const redDocs = redSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
+                const pointsDocs = pointsSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
 
                 // ----- A: TRENDS 7D / 30D -----
 
@@ -124,7 +122,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                 // For segments and new vs returning
                 const customerScanCounts30 = new Map<string, number>();
 
-                txQ.forEach((doc) => {
+                txDocs.forEach((doc) => {
                     const d = doc.data();
                     const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date(d.timestamp);
                     const key = toDayKey(ts);
@@ -175,13 +173,13 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     customerScanCounts30.set(userId, (customerScanCounts30.get(userId) || 0) + 1);
                 });
 
-                // Process redemptions - UPDATED
-                redQ.forEach((doc) => {
+                // Process redemptions
+                redDocs.forEach((doc) => {
                     const d = doc.data();
                     const ts = d.created_at?.toDate ? d.created_at.toDate() : new Date(d.created_at);
                     const key = toDayKey(ts);
                     const userId = d.user_id as string;
-                    const customerName = d.user_name;
+                    const customerName = d.user_name || "Unknown";
                     const points = Number(d.points || 0);
                     const status = d.status;
 
@@ -273,7 +271,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                 let pendingRedemptions30 = 0;
                 let totalPointsRedeemed30 = 0;
 
-                redQ.forEach((doc) => {
+                redDocs.forEach((doc) => {
                     const d = doc.data();
                     const userId = d.user_id as string;
                     const points = Number(d.points || 0);
@@ -330,26 +328,17 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     if (redemptionRatio >= 0.5) segHighValue += 1; // Redeemed at least 50% of earned points
                 });
 
-                // Dormant customers
+                // Dormant customers - use pre-fetched points data
                 let segDormant = 0;
-                try {
-                    const pointsQ = await db
-                        .collection("points")
-                        .where("seller_id", "==", sellerId)
-                        .get();
-
-                    pointsQ.forEach((doc) => {
-                        const d = doc.data();
-                        const uid = d.user_id as string;
-                        const points = Number(d.points || 0);
-                        // Customer has points but no scans in 30 days AND no pending redemptions
-                        if (!customerScanCounts30.has(uid) && points > 0) {
-                            segDormant += 1;
-                        }
-                    });
-                } catch (e) {
-                    // ignore
-                }
+                pointsDocs.forEach((doc) => {
+                    const d = doc.data();
+                    const uid = d.user_id as string;
+                    const points = Number(d.points || 0);
+                    // Customer has points but no scans in 30 days AND no pending redemptions
+                    if (!customerScanCounts30.has(uid) && points > 0) {
+                        segDormant += 1;
+                    }
+                });
 
                 const segments = {
                     new: segNew,
@@ -360,12 +349,12 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     dormant: segDormant,
                 };
 
-                // ----- H: REDEMPTION ANALYTICS - NEW SECTION -----
+                // ----- H: REDEMPTION ANALYTICS - UPDATED with pre-fetched data -----
                 const redemptionAnalytics = {
-                    average_processing_time: await calculateAverageProcessingTime(sellerId),
-                    popular_redemption_points: await getPopularRedemptionPoints(sellerId),
-                    peak_redemption_hours: await getPeakRedemptionHours(sellerId),
-                    failed_redemptions: await getFailedRedemptionsCount(sellerId, last30),
+                    average_processing_time: calculateAverageProcessingTime(redDocs),
+                    popular_redemption_points: getPopularRedemptionPoints(redDocs),
+                    peak_redemption_hours: getPeakRedemptionHours(redDocs),
+                    failed_redemptions: getFailedRedemptionsCount(redDocs, last30),
                 };
 
                 // ----- FINAL RESPONSE -----
@@ -416,12 +405,9 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
         });
     });
 
-// Helper functions for redemption analytics
-async function calculateAverageProcessingTime(sellerId: string): Promise<number> {
-    const redeemedRedemptions = await db.collection("redemptions")
-        .where("seller_id", "==", sellerId)
-        .where("status", "==", "redeemed")
-        .get();
+// Helper functions for redemption analytics - now working with pre-fetched documents
+function calculateAverageProcessingTime(redDocs: FirebaseFirestore.QueryDocumentSnapshot[]): number {
+    const redeemedRedemptions = redDocs.filter(doc => doc.data().status === "redeemed");
 
     let totalProcessingTime = 0;
     let count = 0;
@@ -443,12 +429,8 @@ async function calculateAverageProcessingTime(sellerId: string): Promise<number>
     return count > 0 ? Math.round(totalProcessingTime / count / (1000 * 60)) : 0; // minutes
 }
 
-async function getPopularRedemptionPoints(sellerId: string): Promise<Array<{ points: number, count: number }>> {
-    const redeemedRedemptions = await db.collection("redemptions")
-        .where("seller_id", "==", sellerId)
-        .where("status", "==", "redeemed")
-        .get();
-
+function getPopularRedemptionPoints(redDocs: FirebaseFirestore.QueryDocumentSnapshot[]): Array<{ points: number, count: number }> {
+    const redeemedRedemptions = redDocs.filter(doc => doc.data().status === "redeemed");
     const pointsMap = new Map<number, number>();
 
     redeemedRedemptions.forEach(doc => {
@@ -463,13 +445,8 @@ async function getPopularRedemptionPoints(sellerId: string): Promise<Array<{ poi
         .slice(0, 10);
 }
 
-async function getPeakRedemptionHours(sellerId: string): Promise<Array<{ hour: number, count: number }>> {
-    const redeemedRedemptions = await db.collection("redemptions")
-        .where("seller_id", "==", sellerId)
-        .where("status", "==", "redeemed")
-        .where("redeemed_at", ">=", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
-        .get();
-
+function getPeakRedemptionHours(redDocs: FirebaseFirestore.QueryDocumentSnapshot[]): Array<{ hour: number, count: number }> {
+    const redeemedRedemptions = redDocs.filter(doc => doc.data().status === "redeemed");
     const hourBuckets = new Array(24).fill(0);
 
     redeemedRedemptions.forEach(doc => {
@@ -483,13 +460,12 @@ async function getPeakRedemptionHours(sellerId: string): Promise<Array<{ hour: n
     return hourBuckets.map((count, hour) => ({ hour, count }));
 }
 
-async function getFailedRedemptionsCount(sellerId: string, sinceDate: Date): Promise<number> {
-    const failedRedemptions = await db.collection("redemptions")
-        .where("seller_id", "==", sellerId)
-        .where("status", "in", ["cancelled", "expired"])
-        .where("created_at", ">=", sinceDate)
-        .count()
-        .get();
-
-    return failedRedemptions.data().count;
+function getFailedRedemptionsCount(redDocs: FirebaseFirestore.QueryDocumentSnapshot[], sinceDate: Date): number {
+    return redDocs.filter(doc => {
+        const d = doc.data();
+        const status = d.status;
+        const createdAt = d.created_at?.toDate ?
+            d.created_at.toDate() : new Date(d.created_at);
+        return (status === "cancelled" || status === "expired") && createdAt >= sinceDate;
+    }).length;
 }

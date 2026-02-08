@@ -6,7 +6,7 @@ import cors from "cors";
 const corsHandler = cors({ origin: true });
 
 export const getBalanceBySeller = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -22,12 +22,15 @@ export const getBalanceBySeller = functions.https.onRequest(
                 }
 
                 // ------------------------------------------
-                // Get points for THIS user + THIS seller
+                // Parallel: Get points + seller profile
                 // ------------------------------------------
-                const pointsSnapshot = await db.collection("points")
-                    .where("user_id", "==", currentUser.uid)
-                    .where("seller_id", "==", sellerId)
-                    .get();
+                const [pointsSnapshot, sellerDoc] = await Promise.all([
+                    db.collection("points")
+                        .where("user_id", "==", currentUser.uid)
+                        .where("seller_id", "==", sellerId)
+                        .get(),
+                    db.collection("seller_profiles").doc(sellerId).get()
+                ]);
 
                 if (pointsSnapshot.empty) {
                     return res.status(200).json({});
@@ -38,8 +41,6 @@ export const getBalanceBySeller = functions.https.onRequest(
                 // ------------------------------------------
                 const pointDoc = pointsSnapshot.docs[0];
                 const pointData = pointDoc.data();
-
-                const sellerDoc = await db.collection("seller_profiles").doc(sellerId).get();
                 const sellerData = sellerDoc.exists ? sellerDoc.data() : null;
 
                 const rewardConfig = sellerData?.rewards || {};

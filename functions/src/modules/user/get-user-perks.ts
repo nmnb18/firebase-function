@@ -2,11 +2,13 @@ import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { createCache } from "../../utils/cache";
 
 const corsHandler = cors({ origin: true });
+const cache = createCache();
 
 export const getUserPerks = functions.https.onRequest(
-    { region: 'asia-south1' }, (req, res) => {
+    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
@@ -22,6 +24,13 @@ export const getUserPerks = functions.https.onRequest(
                 const user_id = currentUser.uid;
                 // const { seller_id } = req.query;
                 // const today = new Date().toISOString().slice(0, 10);
+
+                // Check cache (60s TTL)
+                const cacheKey = `user_perks:${user_id}`;
+                const cachedPerks = cache.get<any>(cacheKey);
+                if (cachedPerks) {
+                    return res.status(200).json(cachedPerks);
+                }
 
                 /* --------------------------------------------------
                    CASE 1️⃣ → Seller specific (used to hide CTA)
@@ -90,11 +99,16 @@ export const getUserPerks = functions.https.onRequest(
                     };
                 });
 
-                return res.status(200).json({
+                const responseData = {
                     success: true,
                     count: perks.length,
                     perks,
-                });
+                };
+
+                // Cache result (60s TTL)
+                cache.set(cacheKey, responseData, 60000);
+
+                return res.status(200).json(responseData);
 
             } catch (err: any) {
                 console.error("getUserPerks error:", err);

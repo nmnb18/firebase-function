@@ -4,7 +4,8 @@ import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
-
+// In-memory cache for nearby sellers (keyed by lat,lng, 30s)
+const nearbySellersCache: { [key: string]: { data: any, expires: number } } = {};
 const SEARCH_RADIUS_KM = 25;
 
 // Distance calculator (Haversine Formula)
@@ -24,7 +25,7 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 export const getNearbySellers = functions.https.onRequest(
-    { region: 'asia-south1' }, (req, res) => {
+    { region: 'asia-south1', minInstances: 1, memory: '256MiB', timeoutSeconds: 30 }, (req: any, res: any) => {
         corsHandler(req, res, async () => {
 
             if (req.method !== "GET") {
@@ -32,6 +33,18 @@ export const getNearbySellers = functions.https.onRequest(
             }
 
             try {
+                // Extract user's current location if provided
+                let userLat = req.query.lat ? Number(req.query.lat) : null;
+                let userLng = req.query.lng ? Number(req.query.lng) : null;
+
+                // Caching: only if lat/lng provided
+                if (userLat && userLng) {
+                    const cacheKey = `${userLat},${userLng}`;
+                    if (nearbySellersCache[cacheKey] && nearbySellersCache[cacheKey].expires > Date.now()) {
+                        return res.status(200).json(nearbySellersCache[cacheKey].data);
+                    }
+                }
+
                 // Authentication
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
@@ -40,20 +53,11 @@ export const getNearbySellers = functions.https.onRequest(
 
                 const userId = currentUser.uid;
 
-                // ---------------------------------------------------
-                // 1️⃣ Extract user's current location if provided
-                // ---------------------------------------------------
-                let userLat = req.query.lat ? Number(req.query.lat) : null;
-                let userLng = req.query.lng ? Number(req.query.lng) : null;
-
-                // ---------------------------------------------------
-                // 2️⃣ If missing -> use customer_profiles location
-                // ---------------------------------------------------
+                // If missing -> use customer_profiles location
                 if (!userLat || !userLng) {
                     const customerDoc = await db.collection("customer_profiles")
                         .doc(userId)
                         .get();
-
                     if (customerDoc.exists) {
                         const c = customerDoc.data();
                         userLat = c?.location?.lat;
@@ -65,21 +69,18 @@ export const getNearbySellers = functions.https.onRequest(
                     return res.status(400).json({ error: "User location not available" });
                 }
 
-                // ---------------------------------------------------
-                // 3️⃣ Fetch all active sellers with lat/lng available
-                // ---------------------------------------------------
-                const sellerDocs = await db.collection("seller_profiles").get();
-
-                const nearbySellers: any[] = [];
-
                 const today = new Date().toISOString().slice(0, 10);
 
-                // Fetch all sellers who have offers today
-                const todayOffersSnap = await db
-                    .collection("seller_daily_offers")
-                    .where("date", "==", today)
-                    .where("status", "==", "Active")
-                    .get();
+                // Parallel: Get all sellers + today's offers
+                const [sellerDocs, todayOffersSnap] = await Promise.all([
+                    db.collection("seller_profiles").get(),
+                    db.collection("seller_daily_offers")
+                        .where("date", "==", today)
+                        .where("status", "==", "Active")
+                        .get()
+                ]);
+
+                const nearbySellers: any[] = [];
 
                 // Build lookup set
                 const perksSellerSet = new Set<string>();
@@ -90,7 +91,6 @@ export const getNearbySellers = functions.https.onRequest(
                         perksSellerSet.add(data.seller_id);
                     }
                 });
-
 
                 sellerDocs.forEach((doc) => {
                     const s = doc.data();
@@ -103,7 +103,7 @@ export const getNearbySellers = functions.https.onRequest(
                     // Calculate distance
                     const distanceKm = getDistanceKm(userLat!, userLng!, sLat, sLng);
                     const sellerId = s.user_id;
-                    // Only include within 35 km radius
+                    // Only include within search radius
                     if (distanceKm <= SEARCH_RADIUS_KM) {
                         nearbySellers.push({
                             id: sellerId,
@@ -126,9 +126,7 @@ export const getNearbySellers = functions.https.onRequest(
                     }
                 });
 
-                // ---------------------------------------------------
-                // 4️⃣ Sort nearest first
-                // ---------------------------------------------------
+                // Sort nearest first
                 nearbySellers.sort((a, b) => {
                     if (a.perksAvailable === b.perksAvailable) {
                         return a.distance_km - b.distance_km;
@@ -136,6 +134,11 @@ export const getNearbySellers = functions.https.onRequest(
                     return a.perksAvailable ? -1 : 1;
                 });
 
+                // Cache only if lat/lng provided
+                if (userLat && userLng) {
+                    const cacheKey = `${userLat},${userLng}`;
+                    nearbySellersCache[cacheKey] = { data: { success: true, total: nearbySellers.length, sellers: nearbySellers }, expires: Date.now() + 30000 };
+                }
 
                 return res.status(200).json({
                     success: true,
@@ -144,7 +147,7 @@ export const getNearbySellers = functions.https.onRequest(
                 });
 
             } catch (error: any) {
-                console.error("listNearbySellers Error:", error);
+                console.error("getNearbySellers Error:", error);
                 return res.status(500).json({ error: error.message || "Internal server error" });
             }
         });

@@ -5,7 +5,7 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 export const markNotificationsRead = functions.https.onRequest(
-    { region: "asia-south1" },
+    { region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             try {

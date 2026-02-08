@@ -5,7 +5,7 @@ import { auth, db, adminRef } from "../../config/firebase";
 const corsHandler = cors({ origin: true });
 
 export const phoneLogin = functions.https.onRequest(
-    { region: 'asia-south1' },
+    { region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {

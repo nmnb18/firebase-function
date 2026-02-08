@@ -19,7 +19,7 @@ interface FirebaseAuthResponse {
 }
 
 export const loginUser = functions.https.onRequest(
-    { secrets: ["API_KEY"], region: "asia-south1", },
+    { secrets: ["API_KEY"], region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' },
     (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {

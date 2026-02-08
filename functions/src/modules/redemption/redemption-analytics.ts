@@ -7,7 +7,7 @@ import cors from "cors";
 const corsHandler = cors({ origin: true });
 
 export const redemptionAnalytics = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
@@ -19,12 +19,15 @@ export const redemptionAnalytics = functions.https.onRequest(
                     return res.status(401).json({ error: "Unauthorized" });
                 }
 
-                // Get seller profile
-                const profilesRef = db.collection('seller_profiles');
-                const profileQuery = await profilesRef
-                    .where('user_id', '==', currentUser.uid)
-                    .limit(1)
-                    .get();
+                // Parallel: Get seller profile + redemptions
+                const [profileQuery, redemptionsQuery] = await Promise.all([
+                    db.collection('seller_profiles')
+                        .where('user_id', '==', currentUser.uid)
+                        .limit(1)
+                        .get(),
+                    db.collection("redemptions")
+                        .get()  // Will filter by seller_id after getting profile
+                ]);
 
                 if (profileQuery.empty) {
                     return res.status(404).json({ error: "Seller profile not found" });
@@ -35,18 +38,15 @@ export const redemptionAnalytics = functions.https.onRequest(
                 const sellerData = profileDoc.data();
                 const tier = sellerData?.subscription?.tier || "free";
 
+                // Filter redemptions for this seller
+                const redemptionsData = redemptionsQuery.docs.filter(doc => doc.data().seller_id === sellerId);
                 // Time ranges
                 const now = new Date();
                 const last7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
                 const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-                // Get all redemptions
-                const redemptionsQuery = await db.collection("redemptions")
-                    .where("seller_id", "==", sellerId)
-                    .get();
-
                 const redemptions: any[] = [];
-                redemptionsQuery.forEach(doc => {
+                redemptionsData.forEach(doc => {
                     const data = doc.data();
                     redemptions.push({
                         id: doc.id,

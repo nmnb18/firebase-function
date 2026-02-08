@@ -3,11 +3,13 @@ import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
+import { createCache } from "../../utils/cache";
 
 const corsHandler = cors({ origin: true });
+const cache = createCache();
 
 export const getTransactions = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -21,6 +23,13 @@ export const getTransactions = functions.https.onRequest(
                 const limit = parseInt(req.query.limit as string) || 10;
                 const type = req.query.type as string; // Optional filter by type
                 const sellerId = req.query.seller_id as string; // Optional filter by seller
+
+                // Check cache (90s TTL)
+                const cacheKey = `transactions:${currentUser.uid}_${limit}_${type || 'all'}_${sellerId || 'all'}`;
+                const cached = cache.get<any>(cacheKey);
+                if (cached) {
+                    return res.status(200).json(cached);
+                }
 
                 // Build query
                 let query = db.collection("transactions")
@@ -40,7 +49,9 @@ export const getTransactions = functions.https.onRequest(
                 const transactionsSnapshot = await query.get();
 
                 if (transactionsSnapshot.empty) {
-                    return res.status(200).json([]);
+                    const responseData: any[] = [];
+                    cache.set(cacheKey, responseData, 90000);
+                    return res.status(200).json(responseData);
                 }
 
                 const transactions = transactionsSnapshot.docs.map(doc => {
@@ -64,6 +75,9 @@ export const getTransactions = functions.https.onRequest(
                         }
                     };
                 });
+
+                // Cache result (90s TTL)
+                cache.set(cacheKey, transactions, 90000);
 
                 return res.status(200).json(transactions);
 

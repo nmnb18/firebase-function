@@ -5,7 +5,7 @@ import cors from "cors";
 const corsHandler = cors({ origin: true });
 
 export const reauthenticate = functions.https.onRequest(
-    { secrets: ["API_KEY"], region: "asia-south1", },
+    { secrets: ["API_KEY"], region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
     (req, res) => {
         corsHandler(req, res, async () => {
             try {

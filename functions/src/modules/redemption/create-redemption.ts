@@ -11,7 +11,7 @@ import {
 const corsHandler = cors({ origin: true });
 
 export const createRedemption = functions.https.onRequest(
-    { region: 'asia-south1' }, (req, res) => {
+    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -38,24 +38,17 @@ export const createRedemption = functions.https.onRequest(
                         .json({ error: "Points must be greater than 0" });
                 }
 
-                // 🔎 Fetch seller
-                const sellerDoc = await db
-                    .collection("seller_profiles")
-                    .doc(seller_id)
-                    .get();
+                // 🔎 Parallel: Fetch seller + user
+                const [sellerDoc, userDoc] = await Promise.all([
+                    db.collection("seller_profiles").doc(seller_id).get(),
+                    db.collection("users").doc(currentUser.uid).get()
+                ]);
 
                 if (!sellerDoc.exists) {
                     return res.status(404).json({ error: "Seller not found" });
                 }
 
                 const seller = sellerDoc.data();
-
-                // 🔎 Fetch user
-                const userDoc = await db
-                    .collection("users")
-                    .doc(currentUser.uid)
-                    .get();
-
                 const userData = userDoc.exists ? userDoc.data() : {};
 
                 // 🆔 Generate redemption ID

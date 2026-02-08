@@ -5,7 +5,7 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getSellerOfferById = functions.https.onRequest({ region: "asia-south1", }, (req, res) => {
+export const getSellerOfferById = functions.https.onRequest({ region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, (req: any, res: any) => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "GET")
@@ -21,7 +21,6 @@ export const getSellerOfferById = functions.https.onRequest({ region: "asia-sout
             // -----------------------------------------------------
             // 2️⃣ MODE B: Fetch grouped offers
             // -----------------------------------------------------
-            console.log(today, seller_id)
             const activePromise = db
                 .collection("seller_daily_offers")
                 .where("seller_id", "==", seller_id)

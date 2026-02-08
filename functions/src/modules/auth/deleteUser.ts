@@ -5,7 +5,7 @@ import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 export const deleteUser = functions.https.onRequest(
-    { region: "asia-south1" },
+    { region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
     (req, res) => {
         corsHandler(req, res, async () => {
             try {

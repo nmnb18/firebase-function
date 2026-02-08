@@ -7,7 +7,7 @@ const corsHandler = cors({ origin: true });
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 export const saveSellerOffer = functions.https.onRequest(
-    { region: "asia-south1" },
+    { region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
     (req, res) => {
         corsHandler(req, res, async () => {
             try {

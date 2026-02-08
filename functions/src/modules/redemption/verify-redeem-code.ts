@@ -7,7 +7,7 @@ import admin from "firebase-admin";
 const corsHandler = cors({ origin: true });
 
 export const verifyRedeemCode = functions.https.onRequest(
-    { region: 'asia-south1' }, (req, res) => {
+    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {

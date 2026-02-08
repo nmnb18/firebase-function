@@ -116,7 +116,7 @@ function calculateRewardPoints(amount: number, seller: any): number {
  * SECURE QR SCAN BY SELLER
  * ---------------------------------------------------- */
 export const scanUserQRCode = functions.https.onRequest(
-    { region: "asia-south1" },
+    { region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             try {
@@ -224,9 +224,18 @@ export const scanUserQRCode = functions.https.onRequest(
                 let pointsEarned = calculateRewardPoints(amount, seller);
 
                 // ----------------------------------
-                // Check New Customer
+                // Parallel: Check New Customer + Get Points
                 // ----------------------------------
-                const newCustomer = await isNewCustomer(user_id, sellerId);
+                const [pointsSnap, isNewCust] = await Promise.all([
+                    db.collection("points")
+                        .where("user_id", "==", user_id)
+                        .where("seller_id", "==", sellerId)
+                        .limit(1)
+                        .get(),
+                    isNewCustomer(user_id, sellerId)
+                ]);
+
+                const newCustomer = isNewCust;
                 let isFirstScanBonus = false;
                 if (
                     newCustomer &&
@@ -241,7 +250,6 @@ export const scanUserQRCode = functions.https.onRequest(
                 // Update / Create Points
                 // ----------------------------------
                 const pointsRef = db.collection("points");
-                const pointsSnap = await pointsRef.where("user_id", "==", user_id).where("seller_id", "==", sellerId).limit(1).get();
                 let totalPoints = pointsEarned;
 
                 if (!pointsSnap.empty) {
@@ -264,36 +272,32 @@ export const scanUserQRCode = functions.https.onRequest(
                     "stats.visited_sellers": adminRef.firestore.FieldValue.arrayUnion(sellerId),
                 });
 
-                let customerName = "Customer";
+                // Parallel: Get customer name + save daily scan + record transaction
                 const customerSnap = await customerRef.get();
-                if (customerSnap.exists) customerName = customerSnap.data()?.account?.name || "Customer";
+                const customerName = customerSnap.exists ? customerSnap.data()?.account?.name || "Customer" : "Customer";
 
-                // ----------------------------------
-                // Save Daily Scan
-                // ----------------------------------
-                await db.collection("daily_scans").add({ user_id, seller_id: sellerId, scan_date: new Date(), scanned_at: new Date() });
-
-                // ----------------------------------
-                // Record Transaction
-                // ----------------------------------
-                await db.collection("transactions").add({
-                    user_id,
-                    seller_id: sellerId,
-                    seller_name: seller?.business?.shop_name,
-                    customer_name: customerName,
-                    points: pointsEarned,
-                    base_points: calculateRewardPoints(amount, seller),
-                    bonus_points: newCustomer
-                        ? seller?.rewards?.first_scan_bonus?.points || 0
-                        : 0,
-                    transaction_type: "earn",
-                    qr_type: "user",
-                    amount,
-                    timestamp: new Date(),
-                    description: isFirstScanBonus
-                        ? `Earned ${pointsEarned} points (including first scan bonus)`
-                        : `Earned ${pointsEarned} points`,
-                });
+                // Parallel writes for daily scan and transaction
+                await Promise.all([
+                    db.collection("daily_scans").add({ user_id, seller_id: sellerId, scan_date: new Date(), scanned_at: new Date() }),
+                    db.collection("transactions").add({
+                        user_id,
+                        seller_id: sellerId,
+                        seller_name: seller?.business?.shop_name,
+                        customer_name: customerName,
+                        points: pointsEarned,
+                        base_points: calculateRewardPoints(amount, seller),
+                        bonus_points: newCustomer
+                            ? seller?.rewards?.first_scan_bonus?.points || 0
+                            : 0,
+                        transaction_type: "earn",
+                        qr_type: "user",
+                        amount,
+                        timestamp: new Date(),
+                        description: isFirstScanBonus
+                            ? `Earned ${pointsEarned} points (including first scan bonus)`
+                            : `Earned ${pointsEarned} points`,
+                    })
+                ]);
 
                 // ----------------------------------
                 // Update Seller Stats

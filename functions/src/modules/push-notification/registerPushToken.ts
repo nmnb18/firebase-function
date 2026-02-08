@@ -6,7 +6,7 @@ import { authenticateUser } from "../../middleware/auth";
 const corsHandler = cors({ origin: true });
 
 export const registerPushToken = functions.https.onRequest(
-    { region: 'asia-south1' }, async (req, res) => {
+    { region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             try {
                 const user = await authenticateUser(req.headers.authorization); // gives user.uid

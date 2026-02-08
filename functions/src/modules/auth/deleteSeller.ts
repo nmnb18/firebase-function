@@ -7,7 +7,7 @@ const corsHandler = cors({ origin: true });
 
 
 export const deleteSellerAccount = functions.https.onRequest(
-    { region: "asia-south1" },
+    { region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
     (req, res) => {
         corsHandler(req, res, async () => {
             try {

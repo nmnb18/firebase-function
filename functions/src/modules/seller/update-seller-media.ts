@@ -8,7 +8,7 @@ const corsHandler = cors({ origin: true });
 
 const bucket = adminRef.storage().bucket();
 
-export const updateSellerMedia = functions.https.onRequest({ region: "asia-south1", }, async (req: any, res) => {
+export const updateSellerMedia = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 60, memory: '512MiB' }, async (req: any, res) => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "POST") {

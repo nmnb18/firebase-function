@@ -224,18 +224,15 @@ export const scanUserQRCode = functions.https.onRequest(
                 let pointsEarned = calculateRewardPoints(amount, seller);
 
                 // ----------------------------------
-                // Parallel: Check New Customer + Get Points
+                // Check New Customer (no DB query - just check empty points)
                 // ----------------------------------
-                const [pointsSnap, isNewCust] = await Promise.all([
-                    db.collection("points")
-                        .where("user_id", "==", user_id)
-                        .where("seller_id", "==", sellerId)
-                        .limit(1)
-                        .get(),
-                    isNewCustomer(user_id, sellerId)
-                ]);
+                const pointsSnap = await db.collection("points")
+                    .where("user_id", "==", user_id)
+                    .where("seller_id", "==", sellerId)
+                    .limit(1)
+                    .get();
 
-                const newCustomer = isNewCust;
+                const newCustomer = pointsSnap.empty;
                 let isFirstScanBonus = false;
                 if (
                     newCustomer &&

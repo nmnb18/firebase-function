@@ -158,11 +158,11 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1", m
                 last_active: adminRef.firestore.FieldValue.serverTimestamp(),
             };
 
-            await db.collection("customer_profiles").doc(user.uid).set(customerProfile);
-            const settingsSnap = await db
-                .collection("app_settings")
-                .doc("city_config")
-                .get();
+            // Parallelize: Save customer profile + fetch settings
+            const [, settingsSnap] = await Promise.all([
+                db.collection("customer_profiles").doc(user.uid).set(customerProfile),
+                db.collection("app_settings").doc("city_config").get()
+            ]);
 
             const settings = settingsSnap.data();
 

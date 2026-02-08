@@ -19,14 +19,15 @@ export const redemptionAnalytics = functions.https.onRequest(
                     return res.status(401).json({ error: "Unauthorized" });
                 }
 
-                // Parallel: Get seller profile + redemptions
+                // Parallel: Get seller profile + redemptions (filtered by seller)
                 const [profileQuery, redemptionsQuery] = await Promise.all([
                     db.collection('seller_profiles')
                         .where('user_id', '==', currentUser.uid)
                         .limit(1)
                         .get(),
                     db.collection("redemptions")
-                        .get()  // Will filter by seller_id after getting profile
+                        .where("seller_id", "==", currentUser.uid)  // Add filter here
+                        .get()
                 ]);
 
                 if (profileQuery.empty) {
@@ -38,8 +39,8 @@ export const redemptionAnalytics = functions.https.onRequest(
                 const sellerData = profileDoc.data();
                 const tier = sellerData?.subscription?.tier || "free";
 
-                // Filter redemptions for this seller
-                const redemptionsData = redemptionsQuery.docs.filter(doc => doc.data().seller_id === sellerId);
+                // Redemptions already filtered by seller_id in query
+                const redemptionsData = redemptionsQuery.docs;
                 // Time ranges
                 const now = new Date();
                 const last7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);

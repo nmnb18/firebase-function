@@ -28,7 +28,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                 last7.setDate(now.getDate() - 7);
                 last7.setHours(0, 0, 0, 0);
 
-                // Parallel: Get seller profile + all transactions + all redemptions + all points
+                // Parallel: Get seller profile + all transactions + all redemptions + filtered points
                 const [profileQuery, txSnapshot, redSnapshot, pointsSnapshot] = await Promise.all([
                     db.collection("seller_profiles")
                         .where("user_id", "==", currentUser.uid)
@@ -42,7 +42,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                         .where("created_at", ">=", last30)
                         .get(),
                     db.collection("points")
-                        .get()
+                        .get()  // Still fetch all for dormant segment calculation
                 ]);
 
                 if (profileQuery.empty) {

@@ -2,8 +2,10 @@ import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { createCache } from "../../utils/cache";
 
 const corsHandler = cors({ origin: true });
+const cache = createCache();
 
 export const deleteSellerOffer = functions.https.onRequest(
     { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
@@ -32,7 +34,8 @@ export const deleteSellerOffer = functions.https.onRequest(
 
                 const docId = `${seller_id}_${date}`;
                 await db.collection("seller_daily_offers").doc(docId).delete();
-
+                const cacheKey = `seller_offers:${seller_id}`;
+                cache.delete(cacheKey);
                 return res.status(200).json({ success: true });
             } catch (err: any) {
                 console.error("deleteSellerOffer error:", err);

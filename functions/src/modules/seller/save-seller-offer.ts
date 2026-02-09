@@ -2,10 +2,11 @@ import * as functions from "firebase-functions";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { createCache } from "../../utils/cache";
 
 const corsHandler = cors({ origin: true });
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-
+const cache = createCache();
 export const saveSellerOffer = functions.https.onRequest(
     { region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
     (req, res) => {
@@ -91,7 +92,8 @@ export const saveSellerOffer = functions.https.onRequest(
                 });
 
                 await batch.commit();
-
+                const cacheKey = `seller_offers:${seller_id}`;
+                cache.delete(cacheKey);
                 return res.status(200).json({
                     success: true,
                     dates_saved: dates.length

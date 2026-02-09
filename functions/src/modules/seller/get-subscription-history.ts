@@ -64,7 +64,7 @@ export const getSubscriptionHistory = functions.https.onRequest({ region: "asia-
 
         } catch (error: any) {
             console.error("Get subscription history error:", error);
-            return res.status(err.statusCode ?? 500).json({
+            return res.status(error.statusCode ?? 500).json({
                 success: false,
                 message: "Failed to fetch subscription history"
             });

@@ -136,7 +136,7 @@ export const applyCoupon = functions.https.onRequest(
 
             } catch (error: any) {
                 console.error("Apply coupon error:", error);
-                return res.status(err.statusCode ?? 500).json({
+                return res.status(error.statusCode ?? 500).json({
                     success: false,
                     message: "Failed to apply coupon"
                 });

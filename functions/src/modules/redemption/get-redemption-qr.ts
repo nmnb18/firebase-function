@@ -54,7 +54,7 @@ export const getRedemptionQR = functions.https.onRequest({ region: "asia-south1"
 
         } catch (error: any) {
             console.error("Get redemption QR error:", error);
-            return res.status(err.statusCode ?? 500).json({ error: error.message });
+            return res.status(error.statusCode ?? 500).json({ error: error.message });
         }
     });
 });

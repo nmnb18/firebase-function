@@ -38,7 +38,7 @@ export const logout = functions.https.onRequest(
                 return res.status(200).json({ success: true, message: "User logged out successfully" });
             } catch (error: any) {
                 console.error("LogoutUser Error:", error);
-                return res.status(err.statusCode ?? 500).json({ error: error.message || "Internal Server Error" });
+                return res.status(error.statusCode ?? 500).json({ error: error.message || "Internal Server Error" });
             }
         });
     });

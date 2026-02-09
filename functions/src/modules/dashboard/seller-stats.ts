@@ -204,7 +204,7 @@ export const sellerStats = functions
                 return res.status(200).json({ success: true, data: results });
             } catch (error: any) {
                 console.error("sellerStats error:", error);
-                return res.status(err.statusCode ?? 500).json({ error: error.message || "Server error" });
+                return res.status(error.statusCode ?? 500).json({ error: error.message || "Server error" });
             }
         });
     });

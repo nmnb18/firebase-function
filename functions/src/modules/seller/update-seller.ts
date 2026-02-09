@@ -158,7 +158,7 @@ export const updateSellerProfile = functions.https.onRequest({ region: "asia-sou
                 return res.status(401).json({ error: "Invalid or expired token" });
             }
 
-            return res.status(err.statusCode ?? 500).json({
+            return res.status(error.statusCode ?? 500).json({
                 error: "Failed to update profile. Please try again.",
             });
         }

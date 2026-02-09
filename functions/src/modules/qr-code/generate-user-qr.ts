@@ -85,7 +85,7 @@ export const generateUserQR = functions.https.onRequest(
                 }
 
                 console.error("Generate User QR Error:", error);
-                return res.status(err.statusCode ?? 500).json({
+                return res.status(error.statusCode ?? 500).json({
                     error: error.message || "Internal server error",
                 });
             }

@@ -197,7 +197,7 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1", t
                 return res.status(400).json({ error: "Email already exists" });
             }
 
-            return res.status(err.statusCode ?? 500).json({
+            return res.status(error.statusCode ?? 500).json({
                 error: "Registration failed. Please try again later.",
             });
         }

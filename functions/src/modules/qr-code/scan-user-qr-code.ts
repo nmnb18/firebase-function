@@ -373,7 +373,7 @@ export const scanUserQRCode = functions.https.onRequest(
             } catch (err: any) {
                 if (err.name === "AuthError") return handleAuthError(err, res);
                 console.error("Scan User QR Error:", err);
-                return res.status(500).json({ error: err.message || "Internal server error" });
+                return res.status(err.statusCode ?? 500).json({ error: err.message || "Internal server error" });
             }
         });
     }

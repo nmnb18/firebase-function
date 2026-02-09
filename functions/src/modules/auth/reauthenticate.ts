@@ -58,7 +58,7 @@ export const reauthenticate = functions.https.onRequest(
 
             } catch (err: any) {
                 console.error("reauthenticate error:", err);
-                return res.status(500).json({ error: "Reauth failed" });
+                return res.status(err.statusCode ?? 500).json({ error: "Reauth failed" });
             }
         });
     }

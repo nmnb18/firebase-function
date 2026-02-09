@@ -100,7 +100,7 @@ export const saveSellerOffer = functions.https.onRequest(
                 });
             } catch (err: any) {
                 console.error("saveSellerOffer error:", err);
-                return res.status(500).json({ error: err.message });
+                return res.status(err.statusCode ?? 500).json({ error: err.message });
             }
         });
     }

@@ -112,7 +112,7 @@ export const getUserPerks = functions.https.onRequest(
 
             } catch (err: any) {
                 console.error("getUserPerks error:", err);
-                return res.status(500).json({ error: err.message });
+                return res.status(err.statusCode ?? 500).json({ error: err.message });
             }
         });
     });

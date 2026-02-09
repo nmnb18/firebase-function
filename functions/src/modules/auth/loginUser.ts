@@ -89,7 +89,7 @@ export const loginUser = functions.https.onRequest(
 
             } catch (err: any) {
                 console.error("loginSeller error:", err);
-                return res.status(500).json({ error: "Login failed. Try again later." });
+                return res.status(err.statusCode ?? 500).json({ error: "Login failed. Try again later." });
             }
         });
     }

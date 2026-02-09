@@ -29,7 +29,7 @@ export const getTodayOfferStatus = functions.https.onRequest({ region: "asia-sou
                 redeem_code: snap.exists ? snap.data()?.redeem_code : null
             });
         } catch (err: any) {
-            return res.status(500).json({ error: err.message });
+            return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
 });

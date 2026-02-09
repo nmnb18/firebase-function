@@ -216,7 +216,7 @@ export const processRedemption = functions.https.onRequest(
 
             } catch (error: any) {
                 console.error("Process redemption error:", error);
-                return res.status(500).json({ error: error.message });
+                return res.status(err.statusCode ?? 500).json({ error: error.message });
             }
         });
     });

@@ -39,7 +39,7 @@ export const deleteSellerOffer = functions.https.onRequest(
                 return res.status(200).json({ success: true });
             } catch (err: any) {
                 console.error("deleteSellerOffer error:", err);
-                return res.status(500).json({ error: err.message });
+                return res.status(err.statusCode ?? 500).json({ error: err.message });
             }
         });
     });

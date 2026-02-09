@@ -44,7 +44,7 @@ export const getNotifications = functions.https.onRequest(
                 return res.status(200).json({ success: true, notifications, total: notifications.length });
             } catch (err: any) {
                 console.error("getUserNotifications Error:", err);
-                return res.status(500).json({ error: err.message || "Internal server error" });
+                return res.status(err.statusCode ?? 500).json({ error: err.message || "Internal server error" });
             }
         });
     }

@@ -88,7 +88,7 @@ export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1
             return res.status(200).json({ success: true, offer: selected });
         } catch (err: any) {
             console.error("assignTodayOffer error:", err);
-            return res.status(500).json({ error: err.message });
+            return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
 });

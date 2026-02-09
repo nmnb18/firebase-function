@@ -58,7 +58,7 @@ export const getSellerOfferById = functions.https.onRequest({ region: "asia-sout
             });
         } catch (err: any) {
             console.error("getSellerOffers error:", err);
-            return res.status(500).json({ error: err.message });
+            return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
 });

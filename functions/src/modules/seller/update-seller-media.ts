@@ -63,7 +63,7 @@ export const updateSellerMedia = functions.https.onRequest({ region: "asia-south
 
         } catch (error: any) {
             console.error("updateSellerMedia Error:", error);
-            return res.status(500).json({ error: error.message });
+            return res.status(err.statusCode ?? 500).json({ error: error.message });
         }
     });
 });

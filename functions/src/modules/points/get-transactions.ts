@@ -83,7 +83,7 @@ export const getTransactions = functions.https.onRequest(
 
             } catch (error: any) {
                 console.error("Get transactions error:", error);
-                return res.status(500).json({ error: error.message });
+                return res.status(error.statusCode ?? 500).json({ error: error.message });
             }
         });
     });

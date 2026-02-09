@@ -60,7 +60,7 @@ export const getSellerRedeemedPerks = functions.https.onRequest({ region: "asia-
 
         } catch (err: any) {
             console.error("getSellerPerks error:", err);
-            return res.status(500).json({ error: err.message });
+            return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
 });

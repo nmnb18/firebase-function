@@ -148,7 +148,7 @@ export const getNearbySellers = functions.https.onRequest(
 
             } catch (error: any) {
                 console.error("getNearbySellers Error:", error);
-                return res.status(500).json({ error: error.message || "Internal server error" });
+                return res.status(err.statusCode ?? 500).json({ error: error.message || "Internal server error" });
             }
         });
     });

@@ -53,7 +53,7 @@ export const deleteUser = functions.https.onRequest(
 
             } catch (err: any) {
                 console.error("Delete User Error:", err);
-                return res.status(500).json({ success: false, error: err.message });
+                return res.status(err.statusCode ?? 500).json({ success: false, error: err.message });
             }
         });
     }

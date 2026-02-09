@@ -81,7 +81,7 @@ export const getUserRedemptions = functions.https.onRequest(
                     });
                 }
 
-                return res.status(500).json({
+                return res.status(err.statusCode ?? 500).json({
                     error: error.message || "Failed to fetch redemptions"
                 });
             }

@@ -47,7 +47,7 @@ export const requestPasswordReset = functions.https.onRequest({ secrets: ["API_K
             });
 
         } catch (err: any) {
-            return res.status(500).json({ error: err.message });
+            return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
 });

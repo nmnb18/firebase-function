@@ -73,7 +73,7 @@ export const getRedemptionStatus = functions.https.onRequest(
 
             } catch (error: any) {
                 console.error("Get redemption status error:", error);
-                return res.status(500).json({ error: error.message });
+                return res.status(err.statusCode ?? 500).json({ error: error.message });
             }
         });
     }

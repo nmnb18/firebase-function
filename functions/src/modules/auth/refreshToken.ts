@@ -53,7 +53,7 @@ export const refreshToken = functions.https.onRequest(
                 });
             } catch (err: any) {
                 console.error("Token refresh error:", err);
-                return res.status(500).json({ error: "Internal server error" });
+                return res.status(err.statusCode ?? 500).json({ error: "Internal server error" });
             }
         });
     }

@@ -190,7 +190,7 @@ export const verifyIAPPurchase = functions.https.onRequest(
                 });
             } catch (error: any) {
                 console.error("verifyIAPPurchase error:", error);
-                return res.status(500).json({
+                return res.status(err.statusCode ?? 500).json({
                     success: false,
                     error: error.message || "Verification failed",
                 });

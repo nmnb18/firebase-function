@@ -6,7 +6,7 @@ import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getTodayOfferStatus = functions.https.onRequest({ region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
+export const getTodayOfferStatus = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
     corsHandler(req, res, async () => {
         try {
             const currentUser = await authenticateUser(req.headers.authorization);

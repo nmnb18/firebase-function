@@ -116,7 +116,7 @@ function calculateRewardPoints(amount: number, seller: any): number {
  * SECURE QR SCAN BY SELLER
  * ---------------------------------------------------- */
 export const scanUserQRCode = functions.https.onRequest(
-    { region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' },
+    { region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             try {

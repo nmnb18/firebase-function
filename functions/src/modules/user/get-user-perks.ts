@@ -8,7 +8,7 @@ const corsHandler = cors({ origin: true });
 const cache = createCache();
 
 export const getUserPerks = functions.https.onRequest(
-    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
+    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {

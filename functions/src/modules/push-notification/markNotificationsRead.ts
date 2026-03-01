@@ -29,7 +29,7 @@ export const markNotificationsRead = functions.https.onRequest(
                 return res.json({ success: true });
             } catch (err: any) {
                 console.error("Mark read error", err);
-                return res.status(500).json({ error: err.message });
+                return res.status(err.statusCode ?? 500).json({ error: err.message });
             }
         });
     }

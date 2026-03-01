@@ -7,7 +7,7 @@ import { generateQRBase64 } from "../../utils/qr-helper";
 
 const corsHandler = cors({ origin: true });
 
-export const getRedemptionQR = functions.https.onRequest({ region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const getRedemptionQR = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
     corsHandler(req, res, async () => {
         if (req.method !== "GET") {
             return res.status(405).json({ error: "Method not allowed" });
@@ -54,7 +54,7 @@ export const getRedemptionQR = functions.https.onRequest({ region: "asia-south1"
 
         } catch (error: any) {
             console.error("Get redemption QR error:", error);
-            return res.status(500).json({ error: error.message });
+            return res.status(error.statusCode ?? 500).json({ error: error.message });
         }
     });
 });

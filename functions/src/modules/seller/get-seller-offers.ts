@@ -7,7 +7,7 @@ import { createCache } from "../../utils/cache";
 const corsHandler = cors({ origin: true });
 const cache = createCache();
 export const getSellerOffers = functions.https.onRequest(
-    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, (req: any, res: any) => {
+    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, (req: any, res: any) => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET")
@@ -69,7 +69,7 @@ export const getSellerOffers = functions.https.onRequest(
                 return res.status(200).json(responseData);
             } catch (err: any) {
                 console.error("getSellerOffers error:", err);
-                return res.status(500).json({ error: err.message });
+                return res.status(err.statusCode ?? 500).json({ error: err.message });
             }
         });
     });

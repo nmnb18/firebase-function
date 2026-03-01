@@ -8,7 +8,7 @@ import { createCache } from "../../utils/cache";
 const corsHandler = cors({ origin: true });
 const cache = createCache();
 export const getUserRedemptions = functions.https.onRequest(
-    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -81,7 +81,7 @@ export const getUserRedemptions = functions.https.onRequest(
                     });
                 }
 
-                return res.status(500).json({
+                return res.status(error.statusCode ?? 500).json({
                     error: error.message || "Failed to fetch redemptions"
                 });
             }

@@ -54,7 +54,7 @@ export const validateCity = functions.https.onRequest(
                 });
             } catch (err: any) {
                 console.error("validateCity error:", err);
-                return res.status(500).json({ error: "Failed to validate city" });
+                return res.status(err.statusCode ?? 500).json({ error: "Failed to validate city" });
             }
         });
     }

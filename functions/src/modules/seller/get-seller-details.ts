@@ -50,7 +50,7 @@ export const getSellerDetails = functions.https.onRequest(
                 return res.status(200).json(responseData);
             } catch (err: any) {
                 console.error("getSellerDetails error:", err);
-                return res.status(500).json({ error: err.message });
+                return res.status(err.statusCode ?? 500).json({ error: err.message });
             }
         });
     });

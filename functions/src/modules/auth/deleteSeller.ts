@@ -60,7 +60,7 @@ export const deleteSellerAccount = functions.https.onRequest(
 
             } catch (err: any) {
                 console.error("Delete Seller Error:", err);
-                return res.status(500).json({ success: false, error: err.message });
+                return res.status(err.statusCode ?? 500).json({ success: false, error: err.message });
             }
         });
     }

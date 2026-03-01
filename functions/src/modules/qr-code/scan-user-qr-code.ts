@@ -116,7 +116,7 @@ function calculateRewardPoints(amount: number, seller: any): number {
  * SECURE QR SCAN BY SELLER
  * ---------------------------------------------------- */
 export const scanUserQRCode = functions.https.onRequest(
-    { region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' },
+    { region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             try {
@@ -373,7 +373,7 @@ export const scanUserQRCode = functions.https.onRequest(
             } catch (err: any) {
                 if (err.name === "AuthError") return handleAuthError(err, res);
                 console.error("Scan User QR Error:", err);
-                return res.status(500).json({ error: err.message || "Internal server error" });
+                return res.status(err.statusCode ?? 500).json({ error: err.message || "Internal server error" });
             }
         });
     }

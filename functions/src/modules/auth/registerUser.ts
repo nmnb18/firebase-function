@@ -22,7 +22,7 @@ interface RegisterUserData {
     lng: number;
 }
 
-export const registerUser = functions.https.onRequest({ region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const registerUser = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
     corsHandler(req, res, async () => {
 
         if (req.method !== "POST") {
@@ -197,7 +197,7 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1", m
                 return res.status(400).json({ error: "Email already exists" });
             }
 
-            return res.status(500).json({
+            return res.status(error.statusCode ?? 500).json({
                 error: "Registration failed. Please try again later.",
             });
         }

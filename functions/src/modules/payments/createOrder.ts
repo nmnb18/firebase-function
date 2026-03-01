@@ -9,7 +9,7 @@ const corsHandler = cors({ origin: true });
 
 
 export const createOrder = functions.https.onRequest(
-    { secrets: ["RAZORPAY_ENV", "RAZORPAY_KEY_ID_TEST", "RAZORPAY_SECRET_TEST"], region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' },
+    { secrets: ["RAZORPAY_ENV", "RAZORPAY_KEY_ID_TEST", "RAZORPAY_SECRET_TEST"], region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
     async (req, res) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
@@ -113,7 +113,7 @@ export const createOrder = functions.https.onRequest(
                 });
             } catch (error: any) {
                 console.error("Razorpay order creation error:", error);
-                return res.status(500).json({ error: "Failed to create Razorpay order" });
+                return res.status(error.statusCode ?? 500).json({ error: "Failed to create Razorpay order" });
             }
         });
     }

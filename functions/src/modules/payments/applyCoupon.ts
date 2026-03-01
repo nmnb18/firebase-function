@@ -9,7 +9,7 @@ const corsHandler = cors({ origin: true });
 // In-memory cache for coupon validation (keyed by code+planId+sellerId, 60s)
 const couponCache: { [key: string]: { data: any, expires: number } } = {};
 export const applyCoupon = functions.https.onRequest(
-    { region: 'asia-south1', minInstances: 1, memory: '256MiB', timeoutSeconds: 20 }, async (req: any, res: any) => {
+    { region: 'asia-south1', memory: '256MiB', timeoutSeconds: 20 }, async (req: any, res: any) => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Only POST allowed" });
@@ -136,7 +136,7 @@ export const applyCoupon = functions.https.onRequest(
 
             } catch (error: any) {
                 console.error("Apply coupon error:", error);
-                return res.status(500).json({
+                return res.status(error.statusCode ?? 500).json({
                     success: false,
                     message: "Failed to apply coupon"
                 });

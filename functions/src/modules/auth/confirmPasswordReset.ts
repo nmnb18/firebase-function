@@ -62,7 +62,7 @@ export const confirmPasswordReset = functions.https.onRequest(
 
             } catch (err: any) {
                 console.error("confirmPasswordReset Error:", err);
-                return res.status(500).json({
+                return res.status(err.statusCode ?? 500).json({
                     error: "Failed to reset password"
                 });
             }

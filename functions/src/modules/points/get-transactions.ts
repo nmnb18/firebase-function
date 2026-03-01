@@ -25,11 +25,11 @@ export const getTransactions = functions.https.onRequest(
                 const sellerId = req.query.seller_id as string; // Optional filter by seller
 
                 // Check cache (90s TTL)
-                const cacheKey = `transactions:${currentUser.uid}_${limit}_${type || 'all'}_${sellerId || 'all'}`;
-                const cached = cache.get<any>(cacheKey);
-                if (cached) {
-                    return res.status(200).json(cached);
-                }
+                // const cacheKey = `transactions:${currentUser.uid}_${limit}_${type || 'all'}_${sellerId || 'all'}`;
+                // const cached = cache.get<any>(cacheKey);
+                // if (cached) {
+                //     return res.status(200).json(cached);
+                // }
 
                 // Build query
                 let query = db.collection("transactions")
@@ -50,7 +50,7 @@ export const getTransactions = functions.https.onRequest(
 
                 if (transactionsSnapshot.empty) {
                     const responseData: any[] = [];
-                    cache.set(cacheKey, responseData, 90000);
+                    //cache.set(cacheKey, responseData, 90000);
                     return res.status(200).json(responseData);
                 }
 
@@ -77,7 +77,7 @@ export const getTransactions = functions.https.onRequest(
                 });
 
                 // Cache result (90s TTL)
-                cache.set(cacheKey, transactions, 90000);
+                //cache.set(cacheKey, transactions, 90000);
 
                 return res.status(200).json(transactions);
 

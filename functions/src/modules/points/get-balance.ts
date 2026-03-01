@@ -20,11 +20,11 @@ export const getPointsBalance = functions.https.onRequest(
                 const currentUser = await authenticateUser(req.headers.authorization);
 
                 // Check cache (120s TTL for points balance)
-                const cacheKey = `points_balance:${currentUser.uid}`;
-                const cached = cache.get<any>(cacheKey);
-                if (cached) {
-                    return res.status(200).json(cached);
-                }
+                // const cacheKey = `points_balance:${currentUser.uid}`;
+                // const cached = cache.get<any>(cacheKey);
+                // if (cached) {
+                //     return res.status(200).json(cached);
+                // }
 
                 // Parallel: Get all points, holds, and redemptions
                 const [pointsSnapshot, pointsHoldSnapshot, redemptionsSnapshot] = await Promise.all([
@@ -127,7 +127,7 @@ export const getPointsBalance = functions.https.onRequest(
                 };
 
                 // Cache result (120s TTL)
-                cache.set(cacheKey, responseData, 120000);
+                //cache.set(cacheKey, responseData, 120000);
 
                 return res.status(200).json(responseData);
 

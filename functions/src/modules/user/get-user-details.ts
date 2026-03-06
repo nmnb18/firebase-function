@@ -26,11 +26,11 @@ export const getUserDetails = functions.https.onRequest(
                 }
 
                 // Check cache (90s TTL for user details)
-                const cacheKey = `user_details:${uid}`;
-                const cached = cache.get<any>(cacheKey);
-                if (cached) {
-                    return res.status(200).json(cached);
-                }
+                // const cacheKey = `user_details:${uid}`;
+                // const cached = cache.get<any>(cacheKey);
+                // if (cached) {
+                //     return res.status(200).json(cached);
+                // }
 
                 // GET MAIN USER DOC
                 const userDoc = await db.collection("users").doc(uid).get();
@@ -61,7 +61,7 @@ export const getUserDetails = functions.https.onRequest(
                 };
 
                 // Cache result (90s TTL)
-                cache.set(cacheKey, responseData, 90000);
+                //cache.set(cacheKey, responseData, 90000);
 
                 return res.status(200).json(responseData);
 

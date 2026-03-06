@@ -18,11 +18,11 @@ export const getSellerRedemptions = functions.https.onRequest(
 
                 // Get query parameters
                 const { status, limit = 50, offset = 0 } = req.query;
-                const cacheKey = `seller_redemptions:${sellerUser.uid}_${status || 'all'}_${limit}_${offset}`;
-                const cached = cache.get<any>(cacheKey);
-                if (cached) {
-                    return res.status(200).json(cached);
-                }
+                // const cacheKey = `seller_redemptions:${sellerUser.uid}_${status || 'all'}_${limit}_${offset}`;
+                // const cached = cache.get<any>(cacheKey);
+                // if (cached) {
+                //     return res.status(200).json(cached);
+                // }
                 // Build query
                 let query: any = db.collection("redemptions")
                     .where("seller_id", "==", sellerUser.uid)
@@ -51,7 +51,7 @@ export const getSellerRedemptions = functions.https.onRequest(
                         total: totalCountSnap.data().count,
                     },
                 };
-                cache.set(cacheKey, responseData, 30000);
+                //cache.set(cacheKey, responseData, 30000);
                 return res.status(200).json(responseData);
             } catch (err: any) {
                 console.error("getSellerRedemptions error:", err);

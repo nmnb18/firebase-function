@@ -17,11 +17,11 @@ export const getSellerDetails = functions.https.onRequest(
 
             try {
                 // Caching (60s)
-                const cacheKey = `seller_details:${uid}`;
-                const cached = cache.get<any>(cacheKey);
-                if (cached) {
-                    return res.status(200).json(cached);
-                }
+                // const cacheKey = `seller_details:${uid}`;
+                // const cached = cache.get<any>(cacheKey);
+                // if (cached) {
+                //     return res.status(200).json(cached);
+                // }
                 // authenticate
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
@@ -46,7 +46,7 @@ export const getSellerDetails = functions.https.onRequest(
                         ...(sellerProfile ? { seller_profile: sellerProfile } : {}),
                     },
                 };
-                cache.set(cacheKey, responseData, 60000);
+                //cache.set(cacheKey, responseData, 60000);
                 return res.status(200).json(responseData);
             } catch (err: any) {
                 console.error("getSellerDetails error:", err);

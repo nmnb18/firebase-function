@@ -18,11 +18,11 @@ export const getUserRedemptions = functions.https.onRequest(
                 const currentUser = await authenticateUser(req.headers.authorization);
                 // Get query parameters
                 const { seller_id } = req.query;
-                const cacheKey = `user_redemptions:${currentUser.uid}_${seller_id || 'all'}`;
-                const cached = cache.get<any>(cacheKey);
-                if (cached) {
-                    return res.status(200).json(cached);
-                }
+                // const cacheKey = `user_redemptions:${currentUser.uid}_${seller_id || 'all'}`;
+                // const cached = cache.get<any>(cacheKey);
+                // if (cached) {
+                //     return res.status(200).json(cached);
+                // }
                 // Build base query - NO LIMIT
                 let query: any = db.collection("redemptions")
                     .where("user_id", "==", currentUser.uid)
@@ -68,7 +68,7 @@ export const getUserRedemptions = functions.https.onRequest(
                         .reduce((sum: any, r: { points: any; }) => sum + (r.points || 0), 0),
                 };
                 const responseData = { success: true, redemptions, count: redemptions.length, stats };
-                cache.set(cacheKey, responseData, 30000);
+                //cache.set(cacheKey, responseData, 30000);
                 return res.status(200).json(responseData);
 
             } catch (error: any) {

@@ -21,13 +21,13 @@ export const getSellerOffers = functions.https.onRequest(
                 const today = new Date().toISOString().slice(0, 10);
                 const requestedDate = req.query.date as string | undefined;
                 // Caching for grouped offers (not for single day edit)
-                const cacheKey = `seller_offers:${seller_id}`;
-                if (!requestedDate) {
-                    const cached = cache.get<any>(cacheKey);
-                    if (cached) {
-                        return res.status(200).json(cached);
-                    }
-                }
+                // const cacheKey = `seller_offers:${seller_id}`;
+                // if (!requestedDate) {
+                //     const cached = cache.get<any>(cacheKey);
+                //     if (cached) {
+                //         return res.status(200).json(cached);
+                //     }
+                // }
                 // MODE A: Fetch a single day's offer (used for EDIT)
                 if (requestedDate) {
                     const docId = `${seller_id}_${requestedDate}`;
@@ -65,7 +65,7 @@ export const getSellerOffers = functions.https.onRequest(
                     upcoming: upcomingSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
                     expired: expiredSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
                 };
-                cache.set(cacheKey, responseData, 60000);
+                //cache.set(cacheKey, responseData, 60000);
                 return res.status(200).json(responseData);
             } catch (err: any) {
                 console.error("getSellerOffers error:", err);

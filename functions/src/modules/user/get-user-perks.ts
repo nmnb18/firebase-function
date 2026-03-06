@@ -26,11 +26,11 @@ export const getUserPerks = functions.https.onRequest(
                 // const today = new Date().toISOString().slice(0, 10);
 
                 // Check cache (60s TTL)
-                const cacheKey = `user_perks:${user_id}`;
-                const cachedPerks = cache.get<any>(cacheKey);
-                if (cachedPerks) {
-                    return res.status(200).json(cachedPerks);
-                }
+                // const cacheKey = `user_perks:${user_id}`;
+                // const cachedPerks = cache.get<any>(cacheKey);
+                // if (cachedPerks) {
+                //     return res.status(200).json(cachedPerks);
+                // }
 
                 /* --------------------------------------------------
                    CASE 1️⃣ → Seller specific (used to hide CTA)
@@ -106,7 +106,7 @@ export const getUserPerks = functions.https.onRequest(
                 };
 
                 // Cache result (60s TTL)
-                cache.set(cacheKey, responseData, 60000);
+                //cache.set(cacheKey, responseData, 60000);
 
                 return res.status(200).json(responseData);
 

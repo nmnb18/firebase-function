@@ -15,3 +15,4 @@ export const api = functions.https.onRequest(
 
 // Cron job stays as a separate Cloud Function (not HTTP)
 export { expireUnredeemedOffers } from "./modules/cron/expire-unredeemed-offers";
+export { warmupPing } from "./modules/cron/warmup-ping";

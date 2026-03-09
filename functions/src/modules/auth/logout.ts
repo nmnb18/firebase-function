@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { auth, db } from "../../config/firebase";
 
 import cors from "cors";
@@ -9,9 +9,8 @@ interface LogoutUserData {
 }
 const corsHandler = cors({ origin: true });
 
-export const logout = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' }, async (req, res) => {
-        corsHandler(req, res, async () => {
+export const logoutHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
                     return res.status(405).json({ error: "Method not allowed" });
@@ -41,4 +40,4 @@ export const logout = functions.https.onRequest(
                 return res.status(error.statusCode ?? 500).json({ error: error.message || "Internal Server Error" });
             }
         });
-    });
+};

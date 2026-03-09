@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
@@ -38,9 +38,7 @@ function decodeApplePurchaseToken(jws: string) {
     );
 }
 
-export const verifyIAPPurchase = functions.https.onRequest(
-    { region: 'asia-south1' },
-    async (req, res) => {
+export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
@@ -196,5 +194,4 @@ export const verifyIAPPurchase = functions.https.onRequest(
                 });
             }
         });
-    }
-);
+};

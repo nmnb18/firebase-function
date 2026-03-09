@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
@@ -24,8 +24,7 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-export const getNearbySellers = functions.https.onRequest(
-    { region: 'asia-south1', minInstances: 1, memory: '256MiB', timeoutSeconds: 30 }, (req: any, res: any) => {
+export const getNearbySellersHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
 
             if (req.method !== "GET") {
@@ -151,7 +150,7 @@ export const getNearbySellers = functions.https.onRequest(
                 return res.status(error.statusCode ?? 500).json({ error: error.message || "Internal server error" });
             }
         });
-    });
+};
 
 
 function getRewardDescription(rewardConfig: any) {

@@ -1,12 +1,10 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
-export const markNotificationsRead = functions.https.onRequest(
-    { region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
-    async (req, res) => {
+export const markNotificationsReadHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 const user = await authenticateUser(req.headers.authorization);
@@ -32,5 +30,4 @@ export const markNotificationsRead = functions.https.onRequest(
                 return res.status(err.statusCode ?? 500).json({ error: err.message });
             }
         });
-    }
-);
+};

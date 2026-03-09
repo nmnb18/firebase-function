@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
@@ -8,7 +8,7 @@ const corsHandler = cors({ origin: true });
 
 const bucket = adminRef.storage().bucket();
 
-export const updateSellerMedia = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 60, memory: '512MiB' }, async (req: any, res) => {
+export const updateSellerMediaHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "POST") {
@@ -66,4 +66,4 @@ export const updateSellerMedia = functions.https.onRequest({ region: "asia-south
             return res.status(error.statusCode ?? 500).json({ error: error.message });
         }
     });
-});
+};

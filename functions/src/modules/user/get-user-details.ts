@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
@@ -7,8 +7,7 @@ import { createCache } from "../../utils/cache";
 const corsHandler = cors({ origin: true });
 const cache = createCache();
 
-export const getUserDetails = functions.https.onRequest(
-    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
+export const getUserDetailsHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
 
             if (req.method !== "GET") {
@@ -70,4 +69,4 @@ export const getUserDetails = functions.https.onRequest(
                 return res.status(error.statusCode ?? 500).json({ error: error.message });
             }
         });
-    });
+};

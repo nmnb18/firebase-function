@@ -1,11 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getSellerOfferById = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, (req: any, res: any) => {
+export const getSellerOfferByIdHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "GET")
@@ -61,5 +61,5 @@ export const getSellerOfferById = functions.https.onRequest({ region: "asia-sout
             return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
-});
+};
 

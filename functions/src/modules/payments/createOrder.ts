@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import Razorpay from "razorpay";
 import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
@@ -8,9 +8,7 @@ import { PLAN_CONFIG } from "../../utils/constant";
 const corsHandler = cors({ origin: true });
 
 
-export const createOrder = functions.https.onRequest(
-    { secrets: ["RAZORPAY_ENV", "RAZORPAY_KEY_ID_TEST", "RAZORPAY_SECRET_TEST"], region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
-    async (req, res) => {
+export const createOrderHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Only POST allowed" });
@@ -116,8 +114,7 @@ export const createOrder = functions.https.onRequest(
                 return res.status(error.statusCode ?? 500).json({ error: "Failed to create Razorpay order" });
             }
         });
-    }
-);
+};
 
 // Helper function to validate and apply coupon
 async function validateAndApplyCoupon(couponCode: string, planId: string, sellerId: string, planPrice: number) {

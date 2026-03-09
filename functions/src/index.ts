@@ -1,58 +1,17 @@
-export { registerSeller } from "./modules/auth/registerSeller";
-export { loginSeller } from "./modules/auth/loginSeller";
-export { getSellerDetails } from "./modules/seller/get-seller-details";
-export { updateSellerProfile } from "./modules/seller/update-seller";
-export { logout } from './modules/auth/logout';
-export { sellerStats } from './modules/dashboard/seller-stats';
-export { refreshToken } from './modules/auth/refreshToken';
-export { createOrder } from './modules/payments/createOrder';
-export { verifyPayment } from './modules/payments/verifyPayment';
-export { applyCoupon } from './modules/payments/applyCoupon';
-export { sellerAdvancedAnalytics } from './modules/seller/advance-analytics';
-export { deleteSellerAccount } from "./modules/auth/deleteSeller";
-export { reauthenticate } from "./modules/auth/reauthenticate";
-export { changePassword } from "./modules/auth/changePassword";
-export { requestPasswordReset } from "./modules/auth/requestPasswordReset";
-export { confirmPasswordReset } from "./modules/auth/confirmPasswordReset";
-export { loginUser } from "./modules/auth/loginUser";
-export { registerUser } from "./modules/auth/registerUser";
-export { getUserDetails } from "./modules/user/get-user-details";
-export { getNearbySellers } from "./modules/seller/get-near-by-seller";
-export { getSubscriptionHistory } from "./modules/seller/get-subscription-history";
-export { getPointsBalance } from "./modules/points/get-balance";
-export { getTransactions } from "./modules/points/get-transactions";
-export { cancelRedemption } from "./modules/redemption/cancel-redemption";
-export { createRedemption } from "./modules/redemption/create-redemption";
-export { getSellerRedemptions } from "./modules/redemption/get-seller-redemption";
-export { getUserRedemptions } from "./modules/redemption/get-user-redemption";
-export { processRedemption } from "./modules/redemption/process-redemption";
-export { redemptionAnalytics } from "./modules/redemption/redemption-analytics";
-export { getRedemptionQR } from "./modules/redemption/get-redemption-qr";
-export { getBalanceBySeller } from "./modules/points/get-balance-by-seller";
-export { deleteUser } from "./modules/auth/deleteUser";
-export { updateUserProfile } from "./modules/user/update-user";
-export { updateSellerMedia } from "./modules/seller/update-seller-media";
-export { getRedemptionStatus } from "./modules/redemption/redemption-status";
-export { getSellerOffers } from "./modules/seller/get-seller-offers";
-export { saveSellerOffer } from "./modules/seller/save-seller-offer";
-export { deleteSellerOffer } from "./modules/seller/delete-seller-offer";
-export { getSellerOfferById } from "./modules/seller/get-seller-offer-by-id";
-export { assignTodayOffer } from "./modules/user/assign-today-offer";
-export { getUserPerks } from "./modules/user/get-user-perks";
-export { redeemTodayOffer } from "./modules/user/redeem-today-offer";
-export { getTodayOfferStatus } from "./modules/user/get-today-offer-status";
-export { verifyRedeemCode } from "./modules/redemption/verify-redeem-code";
+import * as functions from "firebase-functions";
+import { app } from "./app";
+
+// Single consolidated API Cloud Run service — one container, zero cold-start overhead
+export const api = functions.https.onRequest(
+    {
+        secrets: ["API_KEY", "RAZORPAY_ENV", "RAZORPAY_KEY_ID_TEST", "RAZORPAY_SECRET_TEST"],
+        region: "asia-south1",
+        minInstances: 0,
+        timeoutSeconds: 60,
+        memory: "512MiB",
+    },
+    app
+);
+
+// Cron job stays as a separate Cloud Function (not HTTP)
 export { expireUnredeemedOffers } from "./modules/cron/expire-unredeemed-offers";
-export { getSellerRedeemedPerks } from "./modules/seller/get-seller-perks";
-export { phoneLogin } from "./modules/auth/phoneLogin";
-export { verifyIAPPurchase } from "./modules/payments/verifyIAPPurchase";
-export { generateUserQR } from "./modules/qr-code/generate-user-qr";
-export { scanUserQRCode } from "./modules/qr-code/scan-user-qr-code";
-export { unregisterPushToken } from "./modules/push-notification/unregisterPushToken";
-export { registerPushToken } from "./modules/push-notification/registerPushToken";
-export { verifyEmail } from "./modules/auth/verifyEmail";
-export { validateCity } from "./modules/auth/validateCity";
-export { getNotifications } from "./modules/push-notification/getNotifications";
-export { getUnreadNotificationCount } from "./modules/push-notification/getUnreadNotificationCount";
-export { markNotificationsRead } from "./modules/push-notification/markNotificationsRead";
-export { markRedemptionAsExpired } from "./modules/redemption/markRedemtionAsExpired";

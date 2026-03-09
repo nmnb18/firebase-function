@@ -1,4 +1,15 @@
 {
+  "hosting": {
+    "public": "public",
+    "cleanUrls": true,
+    "rewrites": [
+      {
+        "source": "/**",
+        "function": "api",
+        "region": "asia-south1"
+      }
+    ]
+  },
   "functions": {
     "source": "functions",
     "ignore": [

@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
@@ -9,9 +9,7 @@ import { PLAN_CONFIG } from "../../utils/constant";
 const corsHandler = cors({ origin: true });
 
 
-export const verifyPayment = functions.https.onRequest(
-    { secrets: ["RAZORPAY_ENV", "RAZORPAY_SECRET_TEST"], region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
-    async (req: any, res: any) => {
+export const verifyPaymentHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Only POST allowed" });
@@ -197,8 +195,7 @@ export const verifyPayment = functions.https.onRequest(
                     .json({ success: false, error: error.message || "Internal error" });
             }
         });
-    }
-);
+};
 
 // Helper function to update coupon usage
 async function updateCouponUsage(couponId: string, sellerId: string, orderId: string, discountAmount: number) {

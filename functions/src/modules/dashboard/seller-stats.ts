@@ -1,12 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const sellerStats = functions
-    .https.onRequest({ region: "asia-south1", minInstances: 1, timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const sellerStatsHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
@@ -207,4 +206,4 @@ export const sellerStats = functions
                 return res.status(error.statusCode ?? 500).json({ error: error.message || "Server error" });
             }
         });
-    });
+};

@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { adminRef, db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser, handleAuthError } from "../../middleware/auth";
@@ -115,9 +115,7 @@ function calculateRewardPoints(amount: number, seller: any): number {
 /** ----------------------------------------------------
  * SECURE QR SCAN BY SELLER
  * ---------------------------------------------------- */
-export const scanUserQRCode = functions.https.onRequest(
-    { region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' },
-    async (req, res) => {
+export const scanUserQRCodeHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -376,5 +374,4 @@ export const scanUserQRCode = functions.https.onRequest(
                 return res.status(err.statusCode ?? 500).json({ error: err.message || "Internal server error" });
             }
         });
-    }
-);
+};

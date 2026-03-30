@@ -76,7 +76,6 @@ export const loginSeller = functions.https.onRequest(
 
         // 5️⃣ Login via Firebase REST API (password check)
         const isEmulator = !!process.env.FIREBASE_AUTH_EMULATOR_HOST;
-        console.log("isEmulator:", isEmulator);
 
         const signInUrl = isEmulator
           ? `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`

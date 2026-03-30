@@ -4,6 +4,7 @@ import cors from "cors";
 import { authenticateUser, handleAuthError } from "../../middleware/auth";
 import pushService, { NotificationChannel, NotificationType } from "../../services/expo-service";
 import { getCurrentMonthScanCount, saveNotification } from "../../utils/helper";
+import { calculateRewardPoints } from "../../utils/calculate-reward-points";
 
 const corsHandler = cors({ origin: true });
 
@@ -87,32 +88,6 @@ async function isNewCustomer(userId: string, sellerId: string): Promise<boolean>
 }
 
 /** ----------------------------------------------------
- * UNIVERSAL REWARD CALCULATOR
- * Supports: flat | percentage | slab | default
- * ---------------------------------------------------- */
-function calculateRewardPoints(amount: number, seller: any): number {
-    const config = seller.rewards || {};
-    switch (config.reward_type) {
-        case "percentage":
-            if (!config.percentage_value) return 0;
-            return Math.round((config.percentage_value / 100) * amount);
-        case "flat":
-            return config.flat_points || 0;
-        case "slab":
-            if (!Array.isArray(config.slab_rules)) return 0;
-            for (const rule of config.slab_rules) {
-                if (amount >= rule.min && amount <= rule.max) return rule.points;
-            }
-            const last = config.slab_rules[config.slab_rules.length - 1];
-            if (amount > last.max) return last.points;
-            return 0;
-        case "default":
-        default:
-            return config.default_points_value || 1;
-    }
-}
-
-/** ----------------------------------------------------
  * SECURE QR SCAN BY SELLER
  * ---------------------------------------------------- */
 export const scanUserQRCode = functions.https.onRequest(
@@ -126,7 +101,6 @@ export const scanUserQRCode = functions.https.onRequest(
                 // AUTH: Seller
                 // ----------------------------------
                 const sellerUser = await authenticateUser(req.headers.authorization);
-                console.log('seller-user', sellerUser)
                 // if (sellerUser.role !== "seller") {
                 //     return res.status(403).json({ error: "Unauthorized" });
                 // }

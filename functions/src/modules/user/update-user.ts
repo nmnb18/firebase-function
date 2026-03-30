@@ -32,6 +32,7 @@ export const updateUserProfile = functions.https.onRequest(
                 const validSections = [
                     "account",
                     "location",
+                    "payment",
                 ];
 
                 if (!validSections.includes(section)) {
@@ -55,10 +56,20 @@ export const updateUserProfile = functions.https.onRequest(
                     updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 };
 
-                updatePayload[section] = {
-                    ...customerProfile[section],
-                    ...data
-                };
+                if (section === "payment") {
+                    // upi_vpa is stored as a top-level field on the customer profile
+                    if (!data.upi_vpa || typeof data.upi_vpa !== "string") {
+                        return res.status(400).json({
+                            error: "upi_vpa (string) is required for the payment section",
+                        });
+                    }
+                    updatePayload.upi_vpa = data.upi_vpa;
+                } else {
+                    updatePayload[section] = {
+                        ...customerProfile[section],
+                        ...data,
+                    };
+                }
 
                 // Update DB
                 await userRef.update(updatePayload);

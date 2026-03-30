@@ -63,8 +63,12 @@ export const loginUser = functions.https.onRequest(
                 }
 
                 // 5️⃣ Login via Firebase REST API (password check)
+                const authEmulatorHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+                const identityToolkitBase = authEmulatorHost
+                    ? `http://${authEmulatorHost}/identitytoolkit.googleapis.com/v1`
+                    : `https://identitytoolkit.googleapis.com/v1`;
                 const response = await fetch(
-                    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+                    `${identityToolkitBase}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
                     {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },

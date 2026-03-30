@@ -76,6 +76,7 @@ export const updateSellerProfile = functions.https.onRequest({ region: "asia-sou
                 "location",
                 "verification",
                 "rewards",
+                "payment",
             ];
 
             if (!validSections.includes(section)) {
@@ -100,7 +101,20 @@ export const updateSellerProfile = functions.https.onRequest({ region: "asia-sou
             };
 
             // Handle rewards section specially for offer ID generation
-            if (section === "rewards") {
+            if (section === "payment") {
+                // data must contain { upi_vpa: string, action?: "add" | "remove" }
+                const { upi_vpa, action = "add" } = data as { upi_vpa: string; action?: string };
+                if (!upi_vpa || typeof upi_vpa !== "string" || !upi_vpa.includes("@")) {
+                    return res.status(400).json({ error: "upi_vpa must be a valid UPI VPA string" });
+                }
+                if (action === "remove") {
+                    updatePayload["rewards.upi_ids"] = adminRef.firestore.FieldValue.arrayRemove(upi_vpa);
+                } else {
+                    updatePayload["rewards.upi_ids"] = adminRef.firestore.FieldValue.arrayUnion(upi_vpa);
+                }
+            }
+            // Handle rewards section specially for offer ID generation
+            else if (section === "rewards") {
                 const existingRewards = sellerProfile.rewards || {};
                 const existingOffers = existingRewards.offers || [];
 
@@ -121,7 +135,6 @@ export const updateSellerProfile = functions.https.onRequest({ region: "asia-sou
                     ...otherRewardData
                 };
 
-                // ✅ ONLY update rewards once
                 updatePayload["rewards"] = updatedRewards;
             }
             else {

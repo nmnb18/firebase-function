@@ -17,7 +17,6 @@ export const getBalanceBySeller = functions.https.onRequest(
                 const sellerId = req.query.seller_id as string;
 
                 if (!sellerId) {
-                    console.log('here', req)
                     return res.status(400).json({ error: "seller_id is required" });
                 }
 

@@ -1,9 +1,9 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 
-export const requestPasswordReset = functions.https.onRequest({ secrets: ["API_KEY"], region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' }, (req, res) => {
+export const requestPasswordResetHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "POST") {
@@ -50,4 +50,4 @@ export const requestPasswordReset = functions.https.onRequest({ secrets: ["API_K
             return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
-});
+};

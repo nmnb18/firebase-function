@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
@@ -10,8 +10,7 @@ import {
 
 const corsHandler = cors({ origin: true });
 
-export const createRedemption = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
+export const createRedemptionHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Method not allowed" });
@@ -173,4 +172,4 @@ export const createRedemption = functions.https.onRequest(
                 });
             }
         });
-    });
+};

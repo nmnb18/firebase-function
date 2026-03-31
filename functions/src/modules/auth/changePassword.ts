@@ -1,13 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { auth } from "../../config/firebase";
 import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 
-export const changePassword = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' },
-    (req, res) => {
-        corsHandler(req, res, async () => {
+export const changePasswordHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
                     return res.status(405).json({ error: "POST only" });
@@ -44,5 +42,4 @@ export const changePassword = functions.https.onRequest(
                 });
             }
         });
-    }
-);
+};

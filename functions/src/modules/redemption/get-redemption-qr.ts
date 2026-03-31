@@ -1,5 +1,5 @@
 // firebase-functions/src/redemption/getRedemptionQR.ts
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
@@ -7,7 +7,7 @@ import { generateQRBase64 } from "../../utils/qr-helper";
 
 const corsHandler = cors({ origin: true });
 
-export const getRedemptionQR = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const getRedemptionQRHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         if (req.method !== "GET") {
             return res.status(405).json({ error: "Method not allowed" });
@@ -57,4 +57,4 @@ export const getRedemptionQR = functions.https.onRequest({ region: "asia-south1"
             return res.status(error.statusCode ?? 500).json({ error: error.message });
         }
     });
-});
+};

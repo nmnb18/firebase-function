@@ -1,11 +1,10 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 
 const corsHandler = cors({ origin: true });
 
-export const confirmPasswordReset = functions.https.onRequest(
-    { secrets: ["API_KEY"], region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' }, (req, res) => {
-        corsHandler(req, res, async () => {
+export const confirmPasswordResetHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
                     return res.status(405).json({ error: "Only POST allowed" });
@@ -67,4 +66,4 @@ export const confirmPasswordReset = functions.https.onRequest(
                 });
             }
         });
-    });
+};

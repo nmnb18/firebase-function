@@ -1,12 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const sellerAdvancedAnalytics = functions.https.onRequest(
-    { region: 'asia-south1', minInstances: 1, timeoutSeconds: 60, memory: '512MiB' }, async (req, res) => {
+export const sellerAdvancedAnalyticsHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
@@ -403,7 +402,7 @@ export const sellerAdvancedAnalytics = functions.https.onRequest(
                     .json({ error: error.message || "Server error in advanced analytics" });
             }
         });
-    });
+};
 
 // Helper functions for redemption analytics - now working with pre-fetched documents
 function calculateAverageProcessingTime(redDocs: FirebaseFirestore.QueryDocumentSnapshot[]): number {

@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { auth, db } from "../../config/firebase";
 import cors from "cors";
 
@@ -18,10 +18,8 @@ interface FirebaseAuthResponse {
   expiresIn: string;
 }
 
-export const loginSeller = functions.https.onRequest(
-  { secrets: ["API_KEY"], region: "asia-south1", minInstances: 1 },
-  (req, res) => {
-    corsHandler(req, res, async () => {
+export const loginSellerHandler = (req: Request, res: Response): void => {
+  corsHandler(req, res, async () => {
       if (req.method !== "POST") {
         return res.status(405).json({ error: "Method not allowed" });
       }
@@ -113,5 +111,4 @@ export const loginSeller = functions.https.onRequest(
           .json({ error: "Login failed. Try again later." });
       }
     });
-  }
-);
+};

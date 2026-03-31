@@ -1,12 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 import { adminRef, auth, db } from "../../config/firebase";
 
 const corsHandler = cors({ origin: true });
 
-export const verifyEmail = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' }, async (req, res) => {
-        corsHandler(req, res, async () => {
+export const verifyEmailHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             const { token } = req.query;
 
             if (!token) {
@@ -47,5 +46,4 @@ export const verifyEmail = functions.https.onRequest(
                 message: "Email verified successfully",
             });
         });
-    }
-);
+};

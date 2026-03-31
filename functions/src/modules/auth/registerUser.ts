@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import crypto from "crypto";
@@ -22,7 +22,7 @@ interface RegisterUserData {
     lng: number;
 }
 
-export const registerUser = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const registerUserHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
 
         if (req.method !== "POST") {
@@ -202,4 +202,4 @@ export const registerUser = functions.https.onRequest({ region: "asia-south1", t
             });
         }
     });
-});
+};

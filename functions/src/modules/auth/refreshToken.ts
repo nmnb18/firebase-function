@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 
 const corsHandler = cors({ origin: true });
@@ -11,10 +11,8 @@ type AuthResponse = {
     error?: { message: string };
 }
 
-export const refreshToken = functions.https.onRequest(
-    { secrets: ["API_KEY"], region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
-    async (req, res) => {
-        corsHandler(req, res, async () => {
+export const refreshTokenHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Method not allowed" });
             }
@@ -56,5 +54,4 @@ export const refreshToken = functions.https.onRequest(
                 return res.status(err.statusCode ?? 500).json({ error: "Internal server error" });
             }
         });
-    }
-);
+};

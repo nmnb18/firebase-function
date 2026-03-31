@@ -1,12 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 import { adminRef, db } from "../../config/firebase";
 
 const corsHandler = cors({ origin: true });
 
-export const validateCity = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' }, async (req, res) => {
-        corsHandler(req, res, async () => {
+export const validateCityHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             try {
                 const { city } = req.body;
 
@@ -57,5 +56,4 @@ export const validateCity = functions.https.onRequest(
                 return res.status(err.statusCode ?? 500).json({ error: "Failed to validate city" });
             }
         });
-    }
-);
+};

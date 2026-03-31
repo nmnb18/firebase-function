@@ -1,11 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getSubscriptionHistory = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const getSubscriptionHistoryHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         if (req.method !== "GET") {
             return res.status(405).json({ error: "Only GET allowed" });
@@ -70,4 +70,4 @@ export const getSubscriptionHistory = functions.https.onRequest({ region: "asia-
             });
         }
     });
-});
+};

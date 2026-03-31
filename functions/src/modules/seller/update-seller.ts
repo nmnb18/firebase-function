@@ -1,5 +1,5 @@
 // firebase-functions/src/seller/updateSellerProfile.ts
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
@@ -48,7 +48,7 @@ function prepareOffersData(offersData: any, existingOffers: any[], sellerId: str
     return existingOffers;
 }
 
-export const updateSellerProfile = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const updateSellerProfileHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "PATCH") {
@@ -176,4 +176,4 @@ export const updateSellerProfile = functions.https.onRequest({ region: "asia-sou
             });
         }
     });
-});
+};

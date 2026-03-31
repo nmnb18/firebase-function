@@ -1,13 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const getNotifications = functions.https.onRequest(
-    { region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
-    async (req, res) => {
+export const getNotificationsHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
@@ -47,5 +45,4 @@ export const getNotifications = functions.https.onRequest(
                 return res.status(err.statusCode ?? 500).json({ error: err.message || "Internal server error" });
             }
         });
-    }
-);
+};

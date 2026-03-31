@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
@@ -6,8 +6,7 @@ import { authenticateUser } from "../../middleware/auth";
 const corsHandler = cors({ origin: true });
 
 
-export const updateUserProfile = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const updateUserProfileHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "PATCH") {
@@ -96,4 +95,4 @@ export const updateUserProfile = functions.https.onRequest(
                 });
             }
         });
-    });
+};

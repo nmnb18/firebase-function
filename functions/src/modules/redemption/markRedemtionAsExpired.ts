@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
@@ -6,8 +6,7 @@ import { Redemption } from "../../types/redemption";
 
 const corsHandler = cors({ origin: true });
 
-export const markRedemptionAsExpired = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 30, memory: '256MiB' }, async (req, res) => {
+export const markRedemptionAsExpiredHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
 
@@ -43,8 +42,8 @@ export const markRedemptionAsExpired = functions.https.onRequest(
                     success: true
                 });
             }
-        })
-    });
+        });
+};
 
 async function releasePointHold(redemptionId: string) {
     const holdsQuery = await db.collection("point_holds")

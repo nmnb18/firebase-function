@@ -1,13 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import cors from "cors";
 import { auth, db, adminRef } from "../../config/firebase";
 
 const corsHandler = cors({ origin: true });
 
-export const phoneLogin = functions.https.onRequest(
-    { region: 'asia-south1', timeoutSeconds: 10, memory: '128MiB' },
-    async (req, res) => {
-        corsHandler(req, res, async () => {
+export const phoneLoginHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             if (req.method !== "POST") {
                 return res.status(405).json({ error: "Method not allowed" });
             }
@@ -129,5 +127,4 @@ export const phoneLogin = functions.https.onRequest(
                 return res.status(401).json({ error: "Invalid Firebase token" });
             }
         });
-    }
-);
+};

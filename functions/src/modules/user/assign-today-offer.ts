@@ -1,11 +1,11 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 
 const corsHandler = cors({ origin: true });
 
-export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1", timeoutSeconds: 30, memory: '256MiB' }, (req, res) => {
+export const assignTodayOfferHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "POST")
@@ -91,4 +91,4 @@ export const assignTodayOffer = functions.https.onRequest({ region: "asia-south1
             return res.status(err.statusCode ?? 500).json({ error: err.message });
         }
     });
-});
+};

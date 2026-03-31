@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import { Request, Response } from "express";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
@@ -6,10 +6,8 @@ import cors from "cors";
 const corsHandler = cors({ origin: true });
 
 
-export const deleteSellerAccount = functions.https.onRequest(
-    { region: "asia-south1", timeoutSeconds: 10, memory: '128MiB' },
-    (req, res) => {
-        corsHandler(req, res, async () => {
+export const deleteSellerAccountHandler = (req: Request, res: Response): void => {
+    corsHandler(req, res, async () => {
             try {
                 if (req.method !== "DELETE") {
                     return res.status(405).json({ error: "Only DELETE allowed" });
@@ -63,6 +61,5 @@ export const deleteSellerAccount = functions.https.onRequest(
                 return res.status(err.statusCode ?? 500).json({ success: false, error: err.message });
             }
         });
-    }
-);
+};
 

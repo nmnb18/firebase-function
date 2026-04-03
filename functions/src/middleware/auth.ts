@@ -68,7 +68,10 @@ export const authenticateExpiredToken = (authorizationHeader: string | undefined
     }
     const token = authorizationHeader.split("Bearer ")[1];
     const decoded: any = jwt.decode(token);
-    if (!decoded?.uid || decoded.uid !== claimedUid) {
+    // Firebase ID tokens use `user_id` and `sub` — the `uid` shorthand is
+    // only mapped by Admin SDK's verifyIdToken(), not by jwt.decode().
+    const tokenUid = decoded?.user_id || decoded?.uid || decoded?.sub;
+    if (!tokenUid || tokenUid !== claimedUid) {
         throw new AuthError("Token does not match provided uid");
     }
 };

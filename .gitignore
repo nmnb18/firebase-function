@@ -32,3 +32,4 @@ Thumbs.db
 
 # Agent customization files
 .github/agents/
+.github/copilot-instructions.md

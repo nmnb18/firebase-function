@@ -39,6 +39,7 @@
     }
   },
   "firestore": {
+    "rules": "firestore.rules",
     "database": "grabbitt",
     "location": "asia-south1"
   }

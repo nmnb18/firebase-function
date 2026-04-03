@@ -3,6 +3,7 @@ import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 import { v4 as uuidv4 } from "uuid";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -12,12 +13,12 @@ export const updateSellerMediaHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser?.uid) {
-                return res.status(401).json({ error: "Unauthorized" });
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
             }
 
             const sellerId = currentUser.uid;
@@ -25,7 +26,7 @@ export const updateSellerMediaHandler = (req: Request, res: Response): void => {
             const { logo, banner } = req.body;
 
             if (!logo && !banner) {
-                return res.status(400).json({ error: "No media provided" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "No media provided", HttpStatus.BAD_REQUEST);
             }
 
             const updates: any = {};
@@ -56,14 +57,11 @@ export const updateSellerMediaHandler = (req: Request, res: Response): void => {
 
             await db.collection("seller_profiles").doc(sellerId).update(updates);
 
-            return res.status(200).json({
-                success: true,
-                media: updates,
-            });
+            return sendSuccess(res, { media: updates }, HttpStatus.OK);
 
         } catch (error: any) {
             console.error("updateSellerMedia Error:", error);
-            return res.status(error.statusCode ?? 500).json({ error: error.message });
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
         }
     });
 };

@@ -5,13 +5,14 @@ import cors from "cors";
 import { Redemption } from "../../types/redemption";
 import { saveNotification } from "../../utils/helper";
 import pushService, { NotificationChannel, NotificationType } from "../../services/expo-service";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const processRedemptionHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -21,7 +22,7 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                 const { redemption_id, seller_notes } = req.body;
 
                 if (!redemption_id) {
-                    return res.status(400).json({ error: "redemption_id is required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "redemption_id is required", HttpStatus.BAD_REQUEST);
                 }
 
                 // 1. Verify seller owns this redemption
@@ -29,21 +30,19 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                 const redemptionDoc = await redemptionRef.get();
 
                 if (!redemptionDoc.exists) {
-                    return res.status(404).json({ error: "Redemption not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Redemption not found", HttpStatus.NOT_FOUND);
                 }
 
                 const redemption = redemptionDoc.data() as Redemption;
 
                 // Check if seller matches
                 if (redemption.seller_id !== sellerUser.uid) {
-                    return res.status(403).json({ error: "Not authorized to process this redemption" });
+                    return sendError(res, ErrorCodes.FORBIDDEN, "Not authorized to process this redemption", HttpStatus.FORBIDDEN);
                 }
 
                 // 2. Check redemption status
                 if (redemption.status !== "pending") {
-                    return res.status(400).json({
-                        error: `Redemption already ${redemption.status}`
-                    });
+                    return sendError(res, ErrorCodes.REDEMPTION_ALREADY_PROCESSED, `Redemption already ${redemption.status}`, HttpStatus.BAD_REQUEST);
                 }
 
                 // 3. Checl if QR is expired
@@ -67,9 +66,7 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                     // Release point hold
                     await releasePointHold(redemption_id);
 
-                    return res.status(400).json({
-                        error: "QR code has expired. Please ask customer to regenerate."
-                    });
+                    return sendError(res, ErrorCodes.QR_EXPIRED, "QR code has expired. Please ask customer to regenerate.", HttpStatus.BAD_REQUEST);
                 }
 
                 // 4. Fetch points document and validate balance
@@ -80,7 +77,7 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                     .get();
 
                 if (pointsQuery.empty) {
-                    return res.status(400).json({ error: "No points record found for this user-seller pair" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "No points record found for this user-seller pair", HttpStatus.BAD_REQUEST);
                 }
 
                 const pointsDoc = pointsQuery.docs[0];
@@ -100,7 +97,7 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                     // Release point hold
                     await releasePointHold(redemption_id);
 
-                    return res.status(400).json({ error: "User has insufficient points" });
+                    return sendError(res, ErrorCodes.INSUFFICIENT_POINTS, "User has insufficient points", HttpStatus.BAD_REQUEST);
                 }
 
                 // 5. ATOMIC BATCH WRITE: points deduction + redemption status + transaction + seller stats
@@ -216,18 +213,17 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                 }
 
                 // 9. Return success response
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     message: "Redemption processed successfully",
                     redemption_id: redemption_id,
                     points_redeemed: Number(redemption.points),
                     user_name: redemption.user_name,
                     timestamp: new Date().toISOString()
-                });
+                }, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Process redemption error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Internal server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import cors from "cors";
 import { adminRef, auth, db } from "../../config/firebase";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -9,7 +10,7 @@ export const verifyEmailHandler = (req: Request, res: Response): void => {
             const { token } = req.query;
 
             if (!token) {
-                return res.status(400).json({ error: "Invalid token" });
+                return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid token", HttpStatus.BAD_REQUEST);
             }
 
             const userSnap = await db
@@ -19,14 +20,14 @@ export const verifyEmailHandler = (req: Request, res: Response): void => {
                 .get();
 
             if (userSnap.empty) {
-                return res.status(400).json({ error: "Token invalid or expired" });
+                return sendError(res, ErrorCodes.INVALID_TOKEN, "Token invalid or expired", HttpStatus.BAD_REQUEST);
             }
 
             const userDoc = userSnap.docs[0];
             const userData = userDoc.data();
 
             if (userData.email_verification_expires.toDate() < new Date()) {
-                return res.status(400).json({ error: "Link expired" });
+                return sendError(res, ErrorCodes.TOKEN_EXPIRED, "Link expired", HttpStatus.BAD_REQUEST);
             }
 
             await userDoc.ref.update({
@@ -41,9 +42,6 @@ export const verifyEmailHandler = (req: Request, res: Response): void => {
                 emailVerified: true,
             });
 
-            return res.status(200).json({
-                success: true,
-                message: "Email verified successfully",
-            });
+            return sendSuccess(res, { message: "Email verified successfully" }, HttpStatus.OK);
         });
 };

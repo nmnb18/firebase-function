@@ -1,19 +1,20 @@
 import { Request, Response } from "express";
 import cors from "cors";
 import { auth, db, adminRef } from "../../config/firebase";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const phoneLoginHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             const { firebaseIdToken, latitude, longitude } = req.body;
 
             if (!firebaseIdToken) {
-                return res.status(400).json({ error: "Missing Firebase token" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing Firebase token", HttpStatus.BAD_REQUEST);
             }
 
             try {
@@ -28,7 +29,7 @@ export const phoneLoginHandler = (req: Request, res: Response): void => {
                 const name = decoded.name ?? "";
 
                 if (!phone) {
-                    return res.status(400).json({ error: "Phone number missing" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Phone number missing", HttpStatus.BAD_REQUEST);
                 }
 
                 const now = adminRef.firestore.FieldValue.serverTimestamp();
@@ -117,14 +118,11 @@ export const phoneLoginHandler = (req: Request, res: Response): void => {
                 // ---------------------------------------------
                 // 4️⃣ DONE
                 // ---------------------------------------------
-                return res.status(200).json({
-                    success: true,
-                    message: "Phone login successful",
-                });
+                return sendSuccess(res, { message: "Phone login successful" }, HttpStatus.OK);
 
             } catch (error) {
                 console.error("phoneLogin error:", error);
-                return res.status(401).json({ error: "Invalid Firebase token" });
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid Firebase token", HttpStatus.UNAUTHORIZED);
             }
         });
 };

@@ -3,24 +3,25 @@ import { adminRef, db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { generateRedeemCode } from "../../utils/helper";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 export const redeemTodayOfferHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
-                    return res.status(405).json({ error: "POST only" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 // 🔐 USER AUTH
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const { seller_id } = req.body;
                 if (!seller_id) {
-                    return res.status(400).json({ error: "seller_id required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "seller_id required", HttpStatus.BAD_REQUEST);
                 }
 
                 const user_id = currentUser.uid;
@@ -89,13 +90,10 @@ export const redeemTodayOfferHandler = (req: Request, res: Response): void => {
                     };
                 });
 
-                return res.status(200).json({
-                    success: true,
-                    ...responsePayload,
-                });
+                return sendSuccess(res, responsePayload, HttpStatus.OK);
             } catch (err: any) {
                 console.error("generateRedeemCode error:", err);
-                return res.status(400).json({ error: err.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, HttpStatus.BAD_REQUEST);
             }
         });
 };

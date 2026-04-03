@@ -4,6 +4,7 @@ import { authenticateUser, handleAuthError } from "../../middleware/auth";
 import cors from "cors";
 import crypto from "crypto";
 import { generateQRBase64 } from "../../utils/qr-helper";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -11,7 +12,7 @@ export const generateUserQRHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
-                    return res.status(405).json({ error: "Method not allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const currentUser = await authenticateUser(
@@ -25,10 +26,7 @@ export const generateUserQRHandler = (req: Request, res: Response): void => {
                 // RETURN EXISTING QR
                 // ------------------------------
                 if (qrSnap.exists) {
-                    return res.status(200).json({
-                        success: true,
-                        data: qrSnap.data(),
-                    });
+                    return sendSuccess(res, qrSnap.data(), HttpStatus.OK);
                 }
 
                 // ------------------------------
@@ -73,19 +71,14 @@ export const generateUserQRHandler = (req: Request, res: Response): void => {
 
                 await qrRef.set(qrDoc);
 
-                return res.status(200).json({
-                    success: true,
-                    data: qrDoc,
-                });
+                return sendSuccess(res, qrDoc, HttpStatus.OK);
             } catch (error: any) {
                 if (error.name === "AuthError") {
                     return handleAuthError(error, res);
                 }
 
                 console.error("Generate User QR Error:", error);
-                return res.status(error.statusCode ?? 500).json({
-                    error: error.message || "Internal server error",
-                });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Internal server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

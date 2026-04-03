@@ -12,6 +12,7 @@ import {
     activateUserIfFirstTime,
     createPointsEarningTransaction,
 } from "../../utils/points-transaction-helpers";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -29,7 +30,7 @@ const corsHandler = cors({ origin: true });
 export const razorpayWebhookHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         if (req.method !== "POST") {
-            return res.status(405).json({ error: "POST only" });
+            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         try {
@@ -37,17 +38,17 @@ export const razorpayWebhookHandler = (req: Request, res: Response): void => {
             const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
             if (!webhookSecret) {
                 console.error("RAZORPAY_WEBHOOK_SECRET is not set");
-                return res.status(500).json({ error: "Webhook secret not configured" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Webhook secret not configured", HttpStatus.INTERNAL_SERVER_ERROR);
             }
 
             const razorpaySignature = req.headers["x-razorpay-signature"] as string;
             if (!razorpaySignature) {
-                return res.status(400).json({ error: "Missing X-Razorpay-Signature header" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing X-Razorpay-Signature header", HttpStatus.BAD_REQUEST);
             }
 
             const rawBody: Buffer | undefined = (req as any).rawBody;
             if (!rawBody) {
-                return res.status(400).json({ error: "Raw body unavailable" });
+                return sendError(res, ErrorCodes.INVALID_INPUT, "Raw body unavailable", HttpStatus.BAD_REQUEST);
             }
 
             const expectedSignature = crypto
@@ -56,26 +57,26 @@ export const razorpayWebhookHandler = (req: Request, res: Response): void => {
                 .digest("hex");
 
             if (expectedSignature !== razorpaySignature) {
-                return res.status(400).json({ error: "Invalid webhook signature" });
+                return sendError(res, ErrorCodes.INVALID_PAYMENT_SIGNATURE, "Invalid webhook signature", HttpStatus.BAD_REQUEST);
             }
 
             // ── 2. Parse event ─────────────────────────────────────────────────────────
             const event = req.body;
             if (event.event !== "payment.captured") {
                 // Acknowledge unhandled events without processing
-                return res.status(200).json({ received: true });
+                return sendSuccess(res, { received: true }, HttpStatus.OK);
             }
 
             const paymentEntity = event.payload?.payment?.entity;
             if (!paymentEntity) {
-                return res.status(400).json({ error: "Malformed webhook payload" });
+                return sendError(res, ErrorCodes.INVALID_INPUT, "Malformed webhook payload", HttpStatus.BAD_REQUEST);
             }
 
             const razorpay_order_id: string = paymentEntity.order_id;
             const razorpay_payment_id: string = paymentEntity.id;
 
             if (!razorpay_order_id || !razorpay_payment_id) {
-                return res.status(400).json({ error: "Missing order_id or payment_id in payload" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing order_id or payment_id in payload", HttpStatus.BAD_REQUEST);
             }
 
             // ── 3. Idempotency guard ───────────────────────────────────────────────────
@@ -84,20 +85,20 @@ export const razorpayWebhookHandler = (req: Request, res: Response): void => {
 
             if (!orderDoc.exists) {
                 // Not a Turbo UPI order managed by this app — ignore silently
-                return res.status(200).json({ received: true });
+                return sendSuccess(res, { received: true }, HttpStatus.OK);
             }
 
             const order = orderDoc.data()!;
             if (order.status !== "pending") {
                 // Already handled (either by confirmUPIPaymentAndAwardPoints or a previous webhook)
-                return res.status(200).json({ received: true, skipped: "already_processed" });
+                return sendSuccess(res, { received: true, skipped: "already_processed" }, HttpStatus.OK);
             }
 
             // ── 4. Fetch seller ────────────────────────────────────────────────────────
             const sellerDoc = await db.collection("seller_profiles").doc(order.seller_id).get();
             if (!sellerDoc.exists) {
                 console.error(`razorpayWebhook: seller ${order.seller_id} not found for order ${razorpay_order_id}`);
-                return res.status(200).json({ received: true, skipped: "seller_not_found" });
+                return sendSuccess(res, { received: true, skipped: "seller_not_found" }, HttpStatus.OK);
             }
             const seller = sellerDoc.data()!;
             const sellerName: string = seller.business?.shop_name || "";
@@ -151,7 +152,7 @@ export const razorpayWebhookHandler = (req: Request, res: Response): void => {
                 activateUserIfFirstTime(order.user_id, order.seller_id),
             ]);
 
-            return res.status(200).json({ received: true, points_awarded: pointsEarned });
+            return sendSuccess(res, { received: true, points_awarded: pointsEarned }, HttpStatus.OK);
         } catch (error: any) {
             console.error("razorpayWebhook error:", error);
             // Always 200 to Razorpay to prevent retries on server errors

@@ -7,34 +7,31 @@ import {
     generateQRId,
     generateRedemptionId,
 } from "../../utils/qr-helper";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const createRedemptionHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
                 // 🔐 Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const { seller_id, points, offer_id, offer_name } = req.body;
 
                 if (!seller_id || !points) {
-                    return res
-                        .status(400)
-                        .json({ error: "seller_id and points are required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "seller_id and points are required", HttpStatus.BAD_REQUEST);
                 }
 
                 if (points <= 0) {
-                    return res
-                        .status(400)
-                        .json({ error: "Points must be greater than 0" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Points must be greater than 0", HttpStatus.BAD_REQUEST);
                 }
 
                 // 🔎 Parallel: Fetch seller + user
@@ -44,7 +41,7 @@ export const createRedemptionHandler = (req: Request, res: Response): void => {
                 ]);
 
                 if (!sellerDoc.exists) {
-                    return res.status(404).json({ error: "Seller not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Seller not found", HttpStatus.NOT_FOUND);
                 }
 
                 const seller = sellerDoc.data();
@@ -76,9 +73,7 @@ export const createRedemptionHandler = (req: Request, res: Response): void => {
                     .get();
 
                 if (pointsQuery.empty) {
-                    return res
-                        .status(400)
-                        .json({ error: "No points found for this seller" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "No points found for this seller", HttpStatus.BAD_REQUEST);
                 }
 
                 const userPointsDoc = pointsQuery.docs[0];
@@ -155,8 +150,7 @@ export const createRedemptionHandler = (req: Request, res: Response): void => {
                 });
 
                 // ✅ Success
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     redemption_id: redemptionId,
                     expires_at: expiresAt,
                     qr_code_base64: qrBase64,
@@ -164,12 +158,10 @@ export const createRedemptionHandler = (req: Request, res: Response): void => {
                     status: "pending",
                     seller_name: seller?.business?.shop_name,
                     points,
-                });
+                }, HttpStatus.OK);
             } catch (error: any) {
                 console.error("createRedemption error:", error);
-                return res.status(400).json({
-                    error: error.message || "Failed to create redemption",
-                });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Failed to create redemption", HttpStatus.BAD_REQUEST);
             }
         });
 };

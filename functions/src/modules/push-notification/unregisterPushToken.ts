@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import cors from "cors";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -12,7 +13,7 @@ export const unregisterPushTokenHandler = (req: Request, res: Response): void =>
                 const { push_token } = req.body;
 
                 if (!push_token) {
-                    return res.status(400).json({ error: "Token required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Token required", HttpStatus.BAD_REQUEST);
                 }
 
                 const snapshot = await db
@@ -25,9 +26,9 @@ export const unregisterPushTokenHandler = (req: Request, res: Response): void =>
                 snapshot.docs.forEach(doc => batch.delete(doc.ref));
                 await batch.commit();
 
-                res.json({ success: true });
+                return sendSuccess(res, { message: "Push token unregistered" }, HttpStatus.OK);
             } catch (err) {
-                res.status(401).json({ error: "Unauthorized" });
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
             }
         });
 };

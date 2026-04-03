@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -42,27 +43,25 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
-                    return res.status(405).json({ error: "Only POST allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const currentUser = await authenticateUser(
                     req.headers.authorization
                 );
                 if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const { purchaseToken, productId, transactionId } = req.body;
 
                 if (!purchaseToken || !productId || !transactionId) {
-                    return res.status(400).json({
-                        error: "Missing purchaseToken, productId, or transactionId",
-                    });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing purchaseToken, productId, or transactionId", HttpStatus.BAD_REQUEST);
                 }
 
                 const plan = PLAN_CONFIG[productId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
-                    return res.status(400).json({ error: "Invalid plan" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid plan", HttpStatus.BAD_REQUEST);
                 }
 
                 // 🔓 Decode Apple payload
@@ -105,10 +104,9 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                     .get();
 
                 if (!existing.empty) {
-                    return res.status(200).json({
-                        success: true,
+                    return sendSuccess(res, {
                         message: "Subscription already processed",
-                    });
+                    }, HttpStatus.OK);
                 }
 
                 /**
@@ -182,8 +180,7 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                 // Commit all writes atomically
                 await batch.commit();
 
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     message: "Apple subscription verified",
                     subscription: {
                         order_id: transactionId,
@@ -191,13 +188,10 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                         expires_at: expiresAt.toISOString(),
                         monthly_qr_limit: plan.monthly_qr_limit,
                     },
-                });
+                }, HttpStatus.OK);
             } catch (error: any) {
                 console.error("verifyIAPPurchase error:", error);
-                return res.status(error.statusCode ?? 500).json({
-                    success: false,
-                    error: error.message || "Verification failed",
-                });
+                return sendError(res, ErrorCodes.PAYMENT_VERIFICATION_FAILED, error.message || "Verification failed", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

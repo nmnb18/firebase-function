@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 // In-memory cache for nearby sellers (keyed by lat,lng, 30s)
@@ -28,7 +29,7 @@ export const getNearbySellersHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
 
             if (req.method !== "GET") {
-                return res.status(405).json({ error: "GET only" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -40,14 +41,14 @@ export const getNearbySellersHandler = (req: Request, res: Response): void => {
                 if (userLat && userLng) {
                     const cacheKey = `${userLat},${userLng}`;
                     if (nearbySellersCache[cacheKey] && nearbySellersCache[cacheKey].expires > Date.now()) {
-                        return res.status(200).json(nearbySellersCache[cacheKey].data);
+                        return sendSuccess(res, nearbySellersCache[cacheKey].data, HttpStatus.OK);
                     }
                 }
 
                 // Authentication
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const userId = currentUser.uid;
@@ -65,7 +66,7 @@ export const getNearbySellersHandler = (req: Request, res: Response): void => {
                 }
 
                 if (!userLat || !userLng) {
-                    return res.status(400).json({ error: "User location not available" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "User location not available", HttpStatus.BAD_REQUEST);
                 }
 
                 const today = new Date().toISOString().slice(0, 10);
@@ -139,15 +140,11 @@ export const getNearbySellersHandler = (req: Request, res: Response): void => {
                     nearbySellersCache[cacheKey] = { data: { success: true, total: nearbySellers.length, sellers: nearbySellers }, expires: Date.now() + 30000 };
                 }
 
-                return res.status(200).json({
-                    success: true,
-                    total: nearbySellers.length,
-                    sellers: nearbySellers,
-                });
+                return sendSuccess(res, { total: nearbySellers.length, sellers: nearbySellers }, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("getNearbySellers Error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message || "Internal server error" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Internal server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

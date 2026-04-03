@@ -5,6 +5,7 @@ import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { generateInternalOrderId } from "../../utils/helper";
 import { PLAN_CONFIG } from "../../utils/constant";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -12,13 +13,13 @@ const corsHandler = cors({ origin: true });
 export const verifyPaymentHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Only POST allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const {
@@ -36,9 +37,7 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                     !razorpay_signature ||
                     !planId
                 ) {
-                    return res
-                        .status(400)
-                        .json({ error: "Missing required parameters" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing required parameters", HttpStatus.BAD_REQUEST);
                 }
 
                 const env = process.env.RAZORPAY_ENV || "test";
@@ -55,20 +54,18 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                     .digest("hex");
 
                 if (expectedSignature !== razorpay_signature) {
-                    return res
-                        .status(400)
-                        .json({ success: false, error: "Invalid signature" });
+                    return sendError(res, ErrorCodes.INVALID_PAYMENT_SIGNATURE, "Invalid signature", HttpStatus.BAD_REQUEST);
                 }
 
                 const plan = PLAN_CONFIG[planId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
-                    return res.status(400).json({ success: false, error: "Invalid plan" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid plan", HttpStatus.BAD_REQUEST);
                 }
 
                 // Get payment record to check for coupon
                 const paymentDoc = await db.collection("payments").doc(razorpay_order_id).get();
                 if (!paymentDoc.exists) {
-                    return res.status(400).json({ success: false, error: "Order not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Order not found", HttpStatus.BAD_REQUEST);
                 }
 
                 const paymentData = paymentDoc.data();
@@ -199,8 +196,7 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                 // Commit all writes atomically
                 await batch.commit();
 
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     message: "Payment verified successfully",
                     subscription: {
                         plan: planId,
@@ -212,12 +208,10 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                         discount_amount: couponUsed ? couponUsed.discountAmount / 100 : 0,
                         coupon_used: couponUsed ? couponUsed.code : null,
                     },
-                });
+                }, HttpStatus.OK);
             } catch (error: any) {
                 console.error("Payment verification error:", error);
-                return res
-                    .status(500)
-                    .json({ success: false, error: error.message || "Internal error" });
+                return sendError(res, ErrorCodes.PAYMENT_VERIFICATION_FAILED, error.message || "Internal error", HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

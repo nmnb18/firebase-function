@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 
 const corsHandler = cors({ origin: true });
@@ -11,7 +12,7 @@ export const getTodayOfferStatusHandler = (req: Request, res: Response): void =>
         try {
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser?.uid) {
-                return res.status(401).json({ error: "Unauthorized" });
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
             }
 
             const { seller_id } = req.query;
@@ -23,13 +24,13 @@ export const getTodayOfferStatusHandler = (req: Request, res: Response): void =>
                 .doc(claimId)
                 .get();
 
-            return res.status(200).json({
+            return sendSuccess(res, {
                 claimed: snap.exists,
                 status: snap.exists ? snap.data()?.status : null,
                 redeem_code: snap.exists ? snap.data()?.redeem_code : null
-            });
+            }, HttpStatus.OK);
         } catch (err: any) {
-            return res.status(err.statusCode ?? 500).json({ error: err.message });
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
         }
     });
 };

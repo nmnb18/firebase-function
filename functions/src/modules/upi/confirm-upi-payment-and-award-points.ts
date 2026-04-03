@@ -13,6 +13,7 @@ import {
     activateUserIfFirstTime,
     createPointsEarningTransaction,
 } from "../../utils/points-transaction-helpers";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -34,13 +35,13 @@ const corsHandler = cors({ origin: true });
 export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         if (req.method !== "POST") {
-            return res.status(405).json({ error: "POST only" });
+            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         try {
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser?.uid) {
-                return res.status(401).json({ error: "Unauthorized" });
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
             }
 
             const {
@@ -51,7 +52,7 @@ export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Respon
             } = req.body;
 
             if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature || !seller_id) {
-                return res.status(400).json({ error: "Missing required fields" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing required fields", HttpStatus.BAD_REQUEST);
             }
 
             // ── 1. Verify Razorpay payment signature ───────────────────────────────────
@@ -67,7 +68,7 @@ export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Respon
                 .digest("hex");
 
             if (expectedSignature !== razorpay_signature) {
-                return res.status(400).json({ error: "Invalid payment signature" });
+                return sendError(res, ErrorCodes.INVALID_PAYMENT_SIGNATURE, "Invalid payment signature", HttpStatus.BAD_REQUEST);
             }
 
             // ── 2. Fetch order — idempotency guard ─────────────────────────────────────
@@ -75,27 +76,24 @@ export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Respon
             const orderDoc = await orderRef.get();
 
             if (!orderDoc.exists) {
-                return res.status(404).json({ error: "Order not found" });
+                return sendError(res, ErrorCodes.NOT_FOUND, "Order not found", HttpStatus.NOT_FOUND);
             }
 
             const order = orderDoc.data()!;
 
             if (order.status !== "pending") {
-                return res.status(409).json({
-                    error: "Order already processed",
-                    code: "ALREADY_PROCESSED",
-                });
+                return sendError(res, ErrorCodes.ORDER_ALREADY_PROCESSED, "Order already processed", HttpStatus.CONFLICT);
             }
 
             // Confirm the order belongs to the authenticated user
             if (order.user_id !== currentUser.uid) {
-                return res.status(403).json({ error: "Forbidden" });
+                return sendError(res, ErrorCodes.FORBIDDEN, "Forbidden", HttpStatus.FORBIDDEN);
             }
 
             // ── 3. Fetch seller ────────────────────────────────────────────────────────
             const sellerDoc = await db.collection("seller_profiles").doc(seller_id).get();
             if (!sellerDoc.exists) {
-                return res.status(404).json({ error: "Seller not found" });
+                return sendError(res, ErrorCodes.NOT_FOUND, "Seller not found", HttpStatus.NOT_FOUND);
             }
             const seller = sellerDoc.data()!;
             const sellerName: string = seller.business?.shop_name || "";
@@ -150,16 +148,15 @@ export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Respon
                 activateUserIfFirstTime(currentUser.uid, seller_id),
             ]);
 
-            return res.status(200).json({
-                success: true,
+            return sendSuccess(res, {
                 points_earned: pointsEarned,
                 total_points: totalPoints,
                 seller_name: sellerName,
                 payment_id: razorpay_payment_id,
-            });
+            }, HttpStatus.OK);
         } catch (error: any) {
             console.error("confirmUPIPaymentAndAwardPoints error:", error);
-            return res.status(500).json({ error: "Internal server error" });
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     });
 };

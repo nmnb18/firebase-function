@@ -3,6 +3,7 @@ import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 import { Redemption } from "../../types/redemption";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -13,7 +14,7 @@ export const markRedemptionAsExpiredHandler = (req: Request, res: Response): voi
                 const { redemption_id } = req.body;
 
                 if (!redemption_id) {
-                    return res.status(400).json({ error: "redemption_id is required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "redemption_id is required", HttpStatus.BAD_REQUEST);
                 }
 
                 // 1. Verify seller owns this redemption
@@ -21,7 +22,7 @@ export const markRedemptionAsExpiredHandler = (req: Request, res: Response): voi
                 const redemptionDoc = await redemptionRef.get();
 
                 if (!redemptionDoc.exists) {
-                    return res.status(404).json({ error: "Redemption not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Redemption not found", HttpStatus.NOT_FOUND);
                 }
 
                 const redemption = redemptionDoc.data() as Redemption;
@@ -38,9 +39,7 @@ export const markRedemptionAsExpiredHandler = (req: Request, res: Response): voi
                 // Release point hold
                 await releasePointHold(redemption_id);
 
-                return res.status(200).json({
-                    success: true
-                });
+                return sendSuccess(res, {}, HttpStatus.OK);
             }
         });
 };

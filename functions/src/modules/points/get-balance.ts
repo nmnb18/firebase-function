@@ -4,6 +4,7 @@ import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 import { createCache } from "../../utils/cache";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 const cache = createCache();
@@ -11,7 +12,7 @@ const cache = createCache();
 export const getPointsBalanceHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -39,7 +40,7 @@ export const getPointsBalanceHandler = (req: Request, res: Response): void => {
                 ]);
 
                 if (pointsSnapshot.empty) {
-                    return res.status(200).json([]);
+                    return sendSuccess(res, [], HttpStatus.OK);
                 }
 
                 // Calculate total points held/reserved
@@ -128,11 +129,11 @@ export const getPointsBalanceHandler = (req: Request, res: Response): void => {
                 // Cache result (120s TTL)
                 //cache.set(cacheKey, responseData, 120000);
 
-                return res.status(200).json(responseData);
+                return sendSuccess(res, responseData, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Get balance error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

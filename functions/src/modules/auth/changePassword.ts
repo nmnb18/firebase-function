@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { auth } from "../../config/firebase";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -8,18 +9,18 @@ export const changePasswordHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
-                    return res.status(405).json({ error: "POST only" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const { newPassword } = req.body;
                 const authHeader = req.headers.authorization;
 
                 if (!authHeader) {
-                    return res.status(401).json({ error: "Missing token" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Missing token", HttpStatus.UNAUTHORIZED);
                 }
 
                 if (!newPassword) {
-                    return res.status(400).json({ error: "New password required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "New password required", HttpStatus.BAD_REQUEST);
                 }
 
                 const idToken = authHeader.replace("Bearer ", "").trim();
@@ -29,17 +30,11 @@ export const changePasswordHandler = (req: Request, res: Response): void => {
                 // 🔥 Update password in Firebase Auth
                 await auth.updateUser(uid, { password: newPassword });
 
-                return res.status(200).json({
-                    success: true,
-                    message: "Password updated successfully"
-                });
+                return sendSuccess(res, { message: "Password updated successfully" }, HttpStatus.OK);
 
             } catch (err: any) {
                 console.error("changePassword error:", err);
-                return res.status(err.statusCode ?? 500).json({
-                    success: false,
-                    error: "Failed to update password"
-                });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to update password", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

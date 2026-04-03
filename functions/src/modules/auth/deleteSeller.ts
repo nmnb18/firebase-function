@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -10,12 +11,12 @@ export const deleteSellerAccountHandler = (req: Request, res: Response): void =>
     corsHandler(req, res, async () => {
             try {
                 if (req.method !== "DELETE") {
-                    return res.status(405).json({ error: "Only DELETE allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only DELETE allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const currentUser = await authenticateUser(req.headers.authorization);
-                if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                if (!currentUser || !currentUser.uid) {
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const sellerId = currentUser.uid;
@@ -51,14 +52,11 @@ export const deleteSellerAccountHandler = (req: Request, res: Response): void =>
                 // 4️⃣ Delete Firebase Auth user
                 await adminRef.auth().deleteUser(sellerId);
 
-                return res.status(200).json({
-                    success: true,
-                    message: "Seller account deleted safely",
-                });
+                return sendSuccess(res, { message: "Seller account deleted safely" }, HttpStatus.OK);
 
             } catch (err: any) {
                 console.error("Delete Seller Error:", err);
-                return res.status(err.statusCode ?? 500).json({ success: false, error: err.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

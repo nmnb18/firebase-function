@@ -3,6 +3,7 @@ import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 const cache = createCache();
@@ -11,13 +12,13 @@ export const getUserPerksHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
-                    return res.status(405).json({ error: "GET only" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 // 🔐 AUTH
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const user_id = currentUser.uid;
@@ -107,11 +108,11 @@ export const getUserPerksHandler = (req: Request, res: Response): void => {
                 // Cache result (60s TTL)
                 //cache.set(cacheKey, responseData, 60000);
 
-                return res.status(200).json(responseData);
+                return sendSuccess(res, { count: perks.length, perks }, HttpStatus.OK);
 
             } catch (err: any) {
                 console.error("getUserPerks error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: err.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

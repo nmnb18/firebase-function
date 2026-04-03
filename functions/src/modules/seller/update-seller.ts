@@ -99,8 +99,7 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
 
             // Handle rewards section specially for offer ID generation
             if (section === "payment") {
-                // Payment section is read-only for VPA display
-                // VPA can only be managed through seller onboarding/setup
+                // Payment VPA is read-only — managed only through seller onboarding/setup
                 return sendError(res, ErrorCodes.FORBIDDEN, "Payment VPA cannot be updated through this endpoint. Manage VPA in profile setup.", HttpStatus.FORBIDDEN);
             }
             // Handle rewards section specially for offer ID generation

@@ -111,6 +111,16 @@ async function seed() {
         const { id, ...profile } = seller;
         await db.collection('seller_profiles').doc(id).set(profile);
 
+        // users doc required by getSellerDetails
+        await db.collection('users').doc(id).set({
+            uid: id,
+            role: 'seller',
+            email: profile.account.email,
+            email_verified: true,
+            verified: true,
+            created_at: new Date(),
+        });
+
         // Daily offers for today
         await db.collection('seller_daily_offers').doc(`${id}_${today}`).set({
             seller_id: id,

@@ -23,13 +23,6 @@ functions/.env.local
 functions/.secret.local
 functions/.runtimeconfig.json
 
-# Architecture tracking (local reference only)
-_docs/ARCH_TRACKER.md
-
 # OS
 .DS_Store
 Thumbs.db
-
-# Agent customization files
-.github/agents/
-.github/copilot-instructions.md

@@ -24,7 +24,14 @@ export const refreshTokenHandler = (req: Request, res: Response): void => {
 
             try {
                 const FIREBASE_API_KEY = process.env.API_KEY;
-                const url = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`;
+                // When the Auth emulator is running, FIREBASE_AUTH_EMULATOR_HOST is set
+                // automatically. Route the REST token exchange to the emulator so that
+                // emulator-issued refresh tokens are accepted.
+                const emulatorHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+                const baseUrl = emulatorHost
+                    ? `http://${emulatorHost}/securetoken.googleapis.com/v1/token`
+                    : `https://securetoken.googleapis.com/v1/token`;
+                const url = `${baseUrl}?key=${FIREBASE_API_KEY}`;
                 const params = new URLSearchParams({
                     grant_type: "refresh_token",
                     refresh_token: refreshToken,

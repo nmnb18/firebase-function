@@ -102,16 +102,11 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
 
             // Handle rewards section specially for offer ID generation
             if (section === "payment") {
-                // data must contain { upi_vpa: string, action?: "add" | "remove" }
-                const { upi_vpa, action = "add" } = data as { upi_vpa: string; action?: string };
-                if (!upi_vpa || typeof upi_vpa !== "string" || !upi_vpa.includes("@")) {
-                    return res.status(400).json({ error: "upi_vpa must be a valid UPI VPA string" });
-                }
-                if (action === "remove") {
-                    updatePayload["rewards.upi_ids"] = adminRef.firestore.FieldValue.arrayRemove(upi_vpa);
-                } else {
-                    updatePayload["rewards.upi_ids"] = adminRef.firestore.FieldValue.arrayUnion(upi_vpa);
-                }
+                // Payment section is read-only for VPA display
+                // VPA can only be managed through seller onboarding/setup
+                return res.status(403).json({ 
+                    error: "Payment VPA cannot be updated through this endpoint. Manage VPA in profile setup." 
+                });
             }
             // Handle rewards section specially for offer ID generation
             else if (section === "rewards") {

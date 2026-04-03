@@ -4,6 +4,15 @@ import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { calculateRewardPoints } from "../../utils/calculate-reward-points";
+import {
+    isNewCustomer,
+    updateSellerStats,
+    updatePointsCollection,
+    createDailyScanRecord,
+    sendPointsEarnedNotifications,
+    activateUserIfFirstTime,
+    createPointsEarningTransaction,
+} from "../../utils/points-transaction-helpers";
 
 const corsHandler = cors({ origin: true });
 
@@ -91,54 +100,55 @@ export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Respon
             const seller = sellerDoc.data()!;
             const sellerName: string = seller.business?.shop_name || "";
 
-            // ── 4. Calculate points (amount is stored in paise → convert to INR) ──────
+            // ── 4. Points snap — check new customer + first-time bonus ────────────────
             const amountINR = order.amount / 100;
-            const pointsEarned = calculateRewardPoints(amountINR, seller);
+            let pointsEarned = calculateRewardPoints(amountINR, seller);
 
-            // ── 5. Atomic batch write ──────────────────────────────────────────────────
-            const batch = db.batch();
-            const now = adminRef.firestore.FieldValue.serverTimestamp();
+            const newCustomer = await isNewCustomer(currentUser.uid, seller_id);
+            let isFirstScanBonus = false;
+            if (
+                newCustomer &&
+                seller?.rewards?.first_scan_bonus?.enabled &&
+                seller?.rewards?.first_scan_bonus?.points > 0
+            ) {
+                // Ensure bonus points are integer (defensive rounding)
+                pointsEarned += Math.round(seller.rewards.first_scan_bonus.points);
+                isFirstScanBonus = true;
+            }
 
-            // 5a. Mark order completed
-            batch.update(orderRef, {
-                status: "completed",
-                razorpay_payment_id,
-                completed_at: now,
-            });
-
-            // 5b. Create transaction record (mirrors existing QR-scan transaction schema)
-            const txRef = db.collection("transactions").doc();
-            batch.set(txRef, {
-                user_id: currentUser.uid,
-                seller_id,
-                seller_name: sellerName,
-                type: "upi_payment",
+            // ── 5. Atomic batch write (using shared utility) ──────────────────────────
+            await createPointsEarningTransaction({
+                userId: currentUser.uid,
+                sellerId: seller_id,
+                sellerName,
+                pointsEarned,
+                basePoints: calculateRewardPoints(amountINR, seller),
+                bonusPoints: isFirstScanBonus ? Math.round(seller.rewards.first_scan_bonus.points) : 0,
+                transactionType: "upi_payment",
                 amount: order.amount,
-                points_earned: pointsEarned,
-                razorpay_order_id,
-                razorpay_payment_id,
-                created_at: now,
+                description: isFirstScanBonus
+                    ? `Earned ${pointsEarned} points (including first scan bonus)`
+                    : `Earned ${pointsEarned} points`,
+                razorpayOrderId: razorpay_order_id,
+                razorpayPaymentId: razorpay_payment_id,
+                orderRef,
+                completedVia: "user_app",
             });
 
-            // 5c. Increment user loyalty points
             const customerRef = db.collection("customer_profiles").doc(currentUser.uid);
-            batch.update(customerRef, {
-                "stats.loyalty_points": adminRef.firestore.FieldValue.increment(pointsEarned),
-                "stats.updated_at": now,
-            });
 
-            // 5d. Update seller stats
-            const sellerRef = db.collection("seller_profiles").doc(seller_id);
-            batch.update(sellerRef, {
-                "stats.total_scans": adminRef.firestore.FieldValue.increment(1),
-                "stats.total_points_distributed": adminRef.firestore.FieldValue.increment(pointsEarned),
-            });
-
-            await batch.commit();
-
-            // Resolve total points for response
+            // ── 6. Post-transaction operations (points, daily_scans, stats, notifications) ─────
             const updatedCustomer = await customerRef.get();
             const totalPoints: number = updatedCustomer.data()?.stats?.loyalty_points || 0;
+            const customerName: string = updatedCustomer.data()?.account?.name || "Customer";
+
+            await Promise.all([
+                updatePointsCollection(currentUser.uid, seller_id, pointsEarned),
+                createDailyScanRecord(currentUser.uid, seller_id, "upi_payment"),
+                updateSellerStats(seller_id, pointsEarned, newCustomer, isFirstScanBonus),
+                sendPointsEarnedNotifications(currentUser.uid, seller_id, pointsEarned, sellerName, customerName),
+                activateUserIfFirstTime(currentUser.uid, seller_id),
+            ]);
 
             return res.status(200).json({
                 success: true,

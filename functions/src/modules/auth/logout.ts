@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
-import { auth, db } from "../../config/firebase";
-
+import { auth } from "../../config/firebase";
+import { authenticateExpiredToken, AuthError } from "../../middleware/auth";
 import cors from "cors";
-import { authenticateUser } from "../../middleware/auth";
 
 interface LogoutUserData {
     uid: string;
 }
+
 const corsHandler = cors({ origin: true });
 
 export const logoutHandler = (req: Request, res: Response): void => {
@@ -16,20 +16,13 @@ export const logoutHandler = (req: Request, res: Response): void => {
                     return res.status(405).json({ error: "Method not allowed" });
                 }
 
-                // authenticate
-                const currentUser = await authenticateUser(req.headers.authorization);
-                // authenticateUser in your middleware likely ends response on failure; 
-                // assume it sets req.currentUser (adjust if your function works differently)
-                //const currentUser = (req as any).currentUser;
-                if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
-                }
-
                 const { uid } = req.body as LogoutUserData;
-
                 if (!uid) {
                     return res.status(400).json({ error: "UID is required" });
                 }
+
+                // Accept expired tokens — decode-only check that the token belongs to the claimed uid.
+                authenticateExpiredToken(req.headers.authorization, uid);
 
                 // Revoke user's refresh tokens
                 await auth.revokeRefreshTokens(uid);

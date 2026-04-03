@@ -2,90 +2,19 @@ import { Request, Response } from "express";
 import { adminRef, db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser, handleAuthError } from "../../middleware/auth";
-import pushService, { NotificationChannel, NotificationType } from "../../services/expo-service";
-import { getCurrentMonthScanCount, saveNotification } from "../../utils/helper";
+import { getCurrentMonthScanCount } from "../../utils/helper";
 import { calculateRewardPoints } from "../../utils/calculate-reward-points";
+import {
+    isNewCustomer,
+    updateSellerStats,
+    updatePointsCollection,
+    createDailyScanRecord,
+    sendPointsEarnedNotifications,
+    activateUserIfFirstTime,
+    createPointsEarningTransaction,
+} from "../../utils/points-transaction-helpers";
 
 const corsHandler = cors({ origin: true });
-
-
-/** ----------------------------------------------------
- * UPDATE SELLER STATS with monthly breakdown
- * ---------------------------------------------------- */
-
-async function activateUserIfFirstTime(
-    userId: string,
-    sellerId: string
-) {
-    const userRef = db.collection("customer_profiles").doc(userId);
-    const sellerRef = db.collection("seller_profiles").doc(sellerId);
-
-    await db.runTransaction(async (tx) => {
-        const userSnap = await tx.get(userRef);
-
-        if (!userSnap.exists) return;
-
-        const activation = userSnap.data()?.activation;
-
-        // Already activated → do nothing
-        if (activation?.activated_by) return;
-
-        // 1️⃣ Mark user activated
-        tx.update(userRef, {
-            "activation.activated_by": sellerId,
-            "activation.activated_at": adminRef.firestore.FieldValue.serverTimestamp(),
-        });
-
-        // 2️⃣ Increment seller activation count
-        tx.update(sellerRef, {
-            "stats.users_activated": adminRef.firestore.FieldValue.increment(1),
-        });
-    });
-}
-
-async function updateSellerStats(sellerId: string, pointsEarned: number, isNewCustomer: boolean = false) {
-    const sellerRef = db.collection("seller_profiles").doc(sellerId);
-
-    const now = new Date();
-    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const currentMonthKey = monthNames[now.getMonth()];
-    const currentYear = now.getFullYear();
-    const monthlyScanKey = `stats.monthly_scans.${currentYear}.${currentMonthKey}`;
-
-    const sellerDoc = await sellerRef.get();
-    const sellerData = sellerDoc.data();
-
-    const updateData: any = {
-        "stats.total_scans": adminRef.firestore.FieldValue.increment(1),
-        "stats.total_points_distributed": adminRef.firestore.FieldValue.increment(pointsEarned)
-    };
-
-    const currentMonthlyScans = sellerData?.stats?.monthly_scans || {};
-    const currentYearScans = currentMonthlyScans[currentYear] || {};
-    const currentMonthCount = currentYearScans[currentMonthKey] || 0;
-    updateData[monthlyScanKey] = currentMonthCount + 1;
-
-    if (isNewCustomer) {
-        updateData["stats.active_customers"] = adminRef.firestore.FieldValue.increment(1);
-        if (sellerData?.rewards?.first_scan_bonus?.enabled) {
-            updateData["stats.first_scan_bonus_given"] = adminRef.firestore.FieldValue.increment(1);
-        }
-    }
-
-    await sellerRef.update(updateData);
-}
-
-/** ----------------------------------------------------
- * CHECK IF USER IS NEW CUSTOMER FOR THIS SELLER
- * ---------------------------------------------------- */
-async function isNewCustomer(userId: string, sellerId: string): Promise<boolean> {
-    const pointsQuery = await db.collection("points")
-        .where("user_id", "==", userId)
-        .where("seller_id", "==", sellerId)
-        .limit(1)
-        .get();
-    return pointsQuery.empty;
-}
 
 /** ----------------------------------------------------
  * SECURE QR SCAN BY SELLER
@@ -196,142 +125,51 @@ export const scanUserQRCodeHandler = (req: Request, res: Response): void => {
                 let pointsEarned = calculateRewardPoints(amount, seller);
 
                 // ----------------------------------
-                // Check New Customer (no DB query - just check empty points)
+                // Check New Customer + Calculate Reward
                 // ----------------------------------
-                const pointsSnap = await db.collection("points")
-                    .where("user_id", "==", user_id)
-                    .where("seller_id", "==", sellerId)
-                    .limit(1)
-                    .get();
-
-                const newCustomer = pointsSnap.empty;
+                const newCustomer = await isNewCustomer(user_id, sellerId);
                 let isFirstScanBonus = false;
                 if (
                     newCustomer &&
                     seller?.rewards?.first_scan_bonus?.enabled &&
                     seller?.rewards?.first_scan_bonus?.points > 0
                 ) {
-                    pointsEarned += seller.rewards.first_scan_bonus.points;
+                    // Ensure bonus points are integer (defensive rounding)
+                    pointsEarned += Math.round(seller.rewards.first_scan_bonus.points);
                     isFirstScanBonus = true;
                 }
 
                 // ----------------------------------
-                // Update / Create Points
+                // Atomic transaction write (using shared utility)
                 // ----------------------------------
-                const pointsRef = db.collection("points");
-                let totalPoints = pointsEarned;
-
-                if (!pointsSnap.empty) {
-                    const ref = pointsSnap.docs[0].ref;
-                    const existing = pointsSnap.docs[0].data().points || 0;
-                    totalPoints = existing + pointsEarned;
-                    await ref.update({ points: totalPoints, last_updated: new Date() });
-                } else {
-                    await pointsRef.add({ user_id, seller_id: sellerId, points: pointsEarned, created_at: new Date(), last_updated: new Date() });
-                }
-
-                // ----------------------------------
-                // Update Customer Profile
-                // ----------------------------------
+                // Get customer name first (needed for transaction record)
                 const customerRef = db.collection("customer_profiles").doc(user_id);
-                await customerRef.update({
-                    "stats.loyalty_points": adminRef.firestore.FieldValue.increment(pointsEarned),
-                    "stats.total_scans": adminRef.firestore.FieldValue.increment(1),
-                    "stats.updated_at": adminRef.firestore.FieldValue.serverTimestamp(),
-                    "stats.visited_sellers": adminRef.firestore.FieldValue.arrayUnion(sellerId),
-                });
-
-                // Parallel: Get customer name + save daily scan + record transaction
                 const customerSnap = await customerRef.get();
                 const customerName = customerSnap.exists ? customerSnap.data()?.account?.name || "Customer" : "Customer";
 
-                // Parallel writes for daily scan and transaction
+                await createPointsEarningTransaction({
+                    userId: user_id,
+                    sellerId,
+                    sellerName: seller?.business?.shop_name,
+                    pointsEarned,
+                    basePoints: calculateRewardPoints(amount, seller),
+                    bonusPoints: isFirstScanBonus ? Math.round(seller.rewards.first_scan_bonus.points) : 0,
+                    transactionType: "qr_scan",
+                    amount,
+                    description: isFirstScanBonus
+                        ? `Earned ${pointsEarned} points (including first scan bonus)`
+                        : `Earned ${pointsEarned} points`,
+                    customerName,
+                });
+
+                // Parallel: update points, daily scan, seller stats, and notifications
+                const totalPoints = await updatePointsCollection(user_id, sellerId, pointsEarned);
                 await Promise.all([
-                    db.collection("daily_scans").add({ user_id, seller_id: sellerId, scan_date: new Date(), scanned_at: new Date() }),
-                    db.collection("transactions").add({
-                        user_id,
-                        seller_id: sellerId,
-                        seller_name: seller?.business?.shop_name,
-                        customer_name: customerName,
-                        points: pointsEarned,
-                        base_points: calculateRewardPoints(amount, seller),
-                        bonus_points: newCustomer
-                            ? seller?.rewards?.first_scan_bonus?.points || 0
-                            : 0,
-                        transaction_type: "earn",
-                        qr_type: "user",
-                        amount,
-                        timestamp: new Date(),
-                        description: isFirstScanBonus
-                            ? `Earned ${pointsEarned} points (including first scan bonus)`
-                            : `Earned ${pointsEarned} points`,
-                    })
+                    createDailyScanRecord(user_id, sellerId, "qr_scan"),
+                    updateSellerStats(sellerId, pointsEarned, newCustomer, isFirstScanBonus),
+                    sendPointsEarnedNotifications(user_id, sellerId, pointsEarned, seller?.business?.shop_name, customerName),
+                    activateUserIfFirstTime(user_id, sellerId),
                 ]);
-
-                // ----------------------------------
-                // Update Seller Stats
-                // ----------------------------------
-                await updateSellerStats(sellerId, pointsEarned, newCustomer);
-
-                // ----------------------------------
-                // Send Push Notification
-                // ----------------------------------
-                await saveNotification(
-                    user_id,
-                    "⭐ Points Credited!",
-                    `You earned ${pointsEarned} points at ${seller?.business?.shop_name}`,
-                    {
-                        type: NotificationType.POINTS_EARNED,
-                        screen: "/(drawer)/(tabs)/wallet",
-                        sellerId,
-                        points: pointsEarned,
-                    }
-                );
-                const tokenSnapPush = await db.collection("push_tokens").where("user_id", "==", user_id).get();
-                const userTokens = tokenSnapPush.docs.map(d => d.data().token);
-
-                if (userTokens.length > 0) {
-                    await pushService.sendToUser(
-                        userTokens,
-                        "⭐ Points Credited!",
-                        `You earned ${pointsEarned} points at ${seller?.business?.shop_name}`,
-                        {
-                            type: NotificationType.POINTS_EARNED,
-                            screen: "/(drawer)/(tabs)/wallet",
-                            params: { sellerId, points: pointsEarned },
-                        },
-                        NotificationChannel.ORDERS
-                    ).catch(err => console.error("Push failed:", err));
-                }
-
-                await saveNotification(
-                    user_id,
-                    "⭐ Points Credited!",
-                    `Customer ${customerName} earned ${pointsEarned} points at your store.`,
-                    {
-                        type: NotificationType.POINTS_EARNED,
-                        screen: "/(drawer)/(tabs)/wallet",
-                        sellerId,
-                        points: pointsEarned,
-                    }
-                );
-                const tokenSnapPush1 = await db.collection("push_tokens").where("user_id", "==", sellerId).get();
-                const sellerTokens = tokenSnapPush1.docs.map(d => d.data().token);
-
-                if (sellerTokens.length > 0) {
-                    await pushService.sendToUser(
-                        sellerTokens,
-                        "⭐ Points Credited!",
-                        `Customer ${customerName} earned ${pointsEarned} points at your store.`,
-                        {
-                            type: NotificationType.NEW_ORDER,
-                            screen: "/(drawer)/redemptions",
-                        },
-                        NotificationChannel.ORDERS
-                    ).catch(err => console.error("Push failed:", err));
-                }
-
-                await activateUserIfFirstTime(user_id, sellerId);
 
                 return res.status(200).json({
                     success: true,

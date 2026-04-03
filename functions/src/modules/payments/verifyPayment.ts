@@ -82,7 +82,11 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
 
                 const internalOrderId = await generateInternalOrderId();
 
-                // Update payment record
+                // ATOMIC BATCH WRITE: payment + coupon usage + seller profile + subscription + history
+                const batch = db.batch();
+
+                // 1. Update payment record
+                const paymentRef = db.collection("payments").doc(razorpay_order_id);
                 const paymentUpdate: any = {
                     status: "paid",
                     razorpay_payment_id,
@@ -100,15 +104,29 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                     };
                 }
 
-                await db.collection("payments").doc(razorpay_order_id).update(paymentUpdate);
+                batch.update(paymentRef, paymentUpdate);
 
-                // Update coupon usage if coupon was applied
+                // 2. Update coupon usage if coupon was applied
                 if (couponUsed) {
-                    await updateCouponUsage(couponUsed.couponId, sellerId, internalOrderId, couponUsed.discountAmount / 100);
+                    const couponRef = db.collection("coupons").doc(couponUsed.couponId);
+                    batch.update(couponRef, {
+                        usedCount: adminRef.firestore.FieldValue.increment(1),
+                        lastUsedAt: adminRef.firestore.FieldValue.serverTimestamp(),
+                    });
+
+                    const usageRef = db.collection("coupon_usage").doc();
+                    batch.set(usageRef, {
+                        couponId: couponUsed.couponId,
+                        sellerId,
+                        orderId: internalOrderId,
+                        discountAmount: couponUsed.discountAmount / 100,
+                        usedAt: adminRef.firestore.FieldValue.serverTimestamp(),
+                    });
                 }
 
-                // Update seller profile
-                await db.collection("seller_profiles").doc(sellerId).update({
+                // 3. Update seller profile
+                const sellerRef = db.collection("seller_profiles").doc(sellerId);
+                batch.update(sellerRef, {
                     subscription: {
                         tier: planId,
                         expires_at: adminRef.firestore.Timestamp.fromDate(expiryDate),
@@ -127,8 +145,10 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                     }
                 });
 
-                // Update subscription record
-                await db.collection("seller_subscriptions").doc(sellerId).set(
+                // 4. Update subscription record
+                const subscriptionRef = db.collection("seller_subscriptions").doc(sellerId);
+                batch.set(
+                    subscriptionRef,
                     {
                         tier: planId,
                         status: "active",
@@ -145,7 +165,13 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                     { merge: true }
                 );
 
-                // Create subscription history entry
+                // 5. Create subscription history entry
+                const historyRef = db
+                    .collection("subscription_history")
+                    .doc(sellerId)
+                    .collection("records")
+                    .doc();
+
                 const historyData: any = {
                     internal_order_id: internalOrderId,
                     razorpay_order_id,
@@ -168,11 +194,10 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                     };
                 }
 
-                await db
-                    .collection("subscription_history")
-                    .doc(sellerId)
-                    .collection("records")
-                    .add(historyData);
+                batch.set(historyRef, historyData);
+
+                // Commit all writes atomically
+                await batch.commit();
 
                 return res.status(200).json({
                     success: true,
@@ -197,26 +222,4 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
         });
 };
 
-// Helper function to update coupon usage
-async function updateCouponUsage(couponId: string, sellerId: string, orderId: string, discountAmount: number) {
-    const batch = db.batch();
-
-    // Increment coupon usage count
-    const couponRef = db.collection("coupons").doc(couponId);
-    batch.update(couponRef, {
-        usedCount: adminRef.firestore.FieldValue.increment(1),
-        lastUsedAt: adminRef.firestore.FieldValue.serverTimestamp(),
-    });
-
-    // Record coupon usage
-    const usageRef = db.collection("coupon_usage").doc();
-    batch.set(usageRef, {
-        couponId,
-        sellerId,
-        orderId,
-        discountAmount,
-        usedAt: adminRef.firestore.FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
-}
+// Helper function removed - coupon usage now part of main atomic batch

@@ -112,9 +112,13 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                 }
 
                 /**
-                 * 1️⃣ Update seller_profiles (same as Razorpay)
+                 * ATOMIC BATCH WRITE: seller profile + subscription + history
                  */
-                await db.collection("seller_profiles").doc(sellerId).update({
+                const batch = db.batch();
+
+                // 1️⃣ Update seller_profiles
+                const sellerRef = db.collection("seller_profiles").doc(sellerId);
+                batch.update(sellerRef, {
                     subscription: {
                         tier: plan.name,
                         expires_at: adminRef.firestore.Timestamp.fromDate(
@@ -135,10 +139,10 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                     },
                 });
 
-                /**
-                 * 2️⃣ Update seller_subscriptions (mirror Razorpay)
-                 */
-                await db.collection("seller_subscriptions").doc(sellerId).set(
+                // 2️⃣ Update seller_subscriptions
+                const subscriptionRef = db.collection("seller_subscriptions").doc(sellerId);
+                batch.set(
+                    subscriptionRef,
                     {
                         tier: plan.name,
                         status: "active",
@@ -156,10 +160,9 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                     { merge: true }
                 );
 
-                /**
-                 * 3️⃣ Insert subscription_history record
-                 */
-                await historyRef.add({
+                // 3️⃣ Insert subscription_history record
+                const historyRecordRef = historyRef.doc();
+                batch.set(historyRecordRef, {
                     store: "apple",
                     product_id: productId,
                     transaction_id: transactionId,
@@ -175,6 +178,9 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                     expires_at:
                         adminRef.firestore.Timestamp.fromDate(expiresAt),
                 });
+
+                // Commit all writes atomically
+                await batch.commit();
 
                 return res.status(200).json({
                     success: true,

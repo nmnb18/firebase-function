@@ -72,70 +72,82 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                     });
                 }
 
-                // 4. Deduct points from user
+                // 4. Fetch points document and validate balance
                 const pointsQuery = await db.collection("points")
                     .where("user_id", "==", redemption.user_id)
                     .where("seller_id", "==", redemption.seller_id)
                     .limit(1)
                     .get();
 
-                if (!pointsQuery.empty) {
-                    const pointsDoc = pointsQuery.docs[0];
-                    const currentPoints = pointsDoc.data().points || 0;
-
-                    if (currentPoints < Number(redemption.points)) {
-                        // User doesn't have enough points (shouldn't happen with point holds)
-                        await redemptionRef.update({
-                            status: "cancelled",
-                            updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
-                            metadata: {
-                                ...redemption.metadata,
-                                seller_notes: seller_notes || "Insufficient points"
-                            }
-                        });
-
-                        // Release point hold
-                        await releasePointHold(redemption_id);
-
-                        return res.status(400).json({ error: "User has insufficient points" });
-                    }
-
-                    // Deduct points
-                    const newPoints = currentPoints - Number(redemption.points);
-                    await pointsDoc.ref.update({
-                        points: newPoints,
-                        last_updated: adminRef.firestore.FieldValue.serverTimestamp()
-                    });
+                if (pointsQuery.empty) {
+                    return res.status(400).json({ error: "No points record found for this user-seller pair" });
                 }
 
-                // Parallel writes: redemption update + transaction + seller stats update
-                const sellerRef = db.collection("seller_profiles").doc(redemption.seller_id);
-                await Promise.all([
-                    redemptionRef.update({
-                        status: "redeemed",
-                        redeemed_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                const pointsDoc = pointsQuery.docs[0];
+                const currentPoints = pointsDoc.data().points || 0;
+
+                if (currentPoints < Number(redemption.points)) {
+                    // User doesn't have enough points (shouldn't happen with point holds)
+                    await redemptionRef.update({
+                        status: "cancelled",
                         updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                         metadata: {
                             ...redemption.metadata,
-                            seller_notes: seller_notes || ""
+                            seller_notes: seller_notes || "Insufficient points"
                         }
-                    }),
-                    db.collection("transactions").add({
-                        user_id: redemption.user_id,
-                        seller_id: redemption.seller_id,
-                        customer_name: redemption.user_name,
-                        seller_name: redemption.seller_shop_name,
-                        points: -Number(redemption.points),
-                        transaction_type: "redeem",
-                        redemption_id: redemption_id,
-                        timestamp: adminRef.firestore.FieldValue.serverTimestamp(),
-                        description: `Redeemed ${redemption.points} points via QR`
-                    }),
-                    sellerRef.update({
-                        "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(Number(redemption.points)),
-                        "stats.total_redemptions": adminRef.firestore.FieldValue.increment(1)
-                    })
-                ]);
+                    });
+
+                    // Release point hold
+                    await releasePointHold(redemption_id);
+
+                    return res.status(400).json({ error: "User has insufficient points" });
+                }
+
+                // 5. ATOMIC BATCH WRITE: points deduction + redemption status + transaction + seller stats
+                const batch = db.batch();
+                const sellerRef = db.collection("seller_profiles").doc(redemption.seller_id);
+                const transactionRef = db.collection("transactions").doc(); // Generate new doc ID
+
+                // Deduct points
+                const newPoints = currentPoints - Number(redemption.points);
+                batch.update(pointsDoc.ref, {
+                    points: newPoints,
+                    last_updated: adminRef.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Mark redemption as redeemed
+                batch.update(redemptionRef, {
+                    status: "redeemed",
+                    redeemed_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    metadata: {
+                        ...redemption.metadata,
+                        seller_notes: seller_notes || ""
+                    }
+                });
+
+                // Create transaction record
+                batch.set(transactionRef, {
+                    user_id: redemption.user_id,
+                    seller_id: redemption.seller_id,
+                    customer_name: redemption.user_name,
+                    seller_name: redemption.seller_shop_name,
+                    points: -Number(redemption.points),
+                    transaction_type: "redeem",
+                    redemption_id: redemption_id,
+                    timestamp: adminRef.firestore.FieldValue.serverTimestamp(),
+                    created_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    description: `Redeemed ${redemption.points} points via QR`
+                });
+
+                // Update seller stats
+                batch.update(sellerRef, {
+                    "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(Number(redemption.points)),
+                    "stats.total_redemptions": adminRef.firestore.FieldValue.increment(1)
+                });
+
+                // Commit all writes atomically
+                await batch.commit();
 
                 // 8. Parallelize all notifications and token fetches
                 const [, tokenSnapUser, , tokenSnapSeller] = await Promise.all([

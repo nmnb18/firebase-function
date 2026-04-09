@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { auth, db } from "../../config/firebase";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -21,13 +22,13 @@ interface FirebaseAuthResponse {
 export const loginUserHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             const { email, password, role } = req.body as LoginUserData;
 
             if (!email || !password || !role) {
-                return res.status(400).json({ error: "Email, password and role are required" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Email, password and role are required", HttpStatus.BAD_REQUEST);
             }
 
             try {
@@ -37,32 +38,33 @@ export const loginUserHandler = (req: Request, res: Response): void => {
                 // 1️⃣ Get user by email
                 const userRecord = await auth.getUserByEmail(email).catch(() => null);
                 if (!userRecord) {
-                    return res.status(404).json({ error: "Account not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Account not found", HttpStatus.NOT_FOUND);
                 }
 
                 // 2️⃣ Get Firestore user document
                 const userDoc = await db.collection("users").doc(userRecord.uid).get();
                 if (!userDoc.exists) {
-                    return res.status(404).json({ error: "User data missing" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "User data missing", HttpStatus.NOT_FOUND);
                 }
 
                 const userData = userDoc.data();
 
                 // 3️⃣ Verify role
                 if (userData?.role !== role) {
-                    return res.status(403).json({ error: "Invalid account type for this login" });
+                    return sendError(res, ErrorCodes.FORBIDDEN, "Invalid account type for this login", HttpStatus.FORBIDDEN);
                 }
 
                 if (!userData?.email_verified || userData?.email_verified === false) {
-                    return res.status(403).json({
-                        error:
-                            "Please verify your email.",
-                    });
+                    return sendError(res, ErrorCodes.FORBIDDEN, "Please verify your email.", HttpStatus.FORBIDDEN);
                 }
 
                 // 5️⃣ Login via Firebase REST API (password check)
+                const authEmulatorHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+                const identityToolkitBase = authEmulatorHost
+                    ? `http://${authEmulatorHost}/identitytoolkit.googleapis.com/v1`
+                    : `https://identitytoolkit.googleapis.com/v1`;
                 const response = await fetch(
-                    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+                    `${identityToolkitBase}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
                     {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -73,21 +75,20 @@ export const loginUserHandler = (req: Request, res: Response): void => {
                 const data = (await response.json()) as FirebaseAuthResponse;
 
                 if (data.error) {
-                    return res.status(401).json({ error: "Invalid email or password" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid email or password", HttpStatus.UNAUTHORIZED);
                 }
 
                 // 6️⃣ Return final login response
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     uid: data.localId,
                     idToken: data.idToken,
                     refreshToken: data.refreshToken,
                     expiresIn: data.expiresIn
-                });
+                }, HttpStatus.OK);
 
             } catch (err: any) {
                 console.error("loginSeller error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: "Login failed. Try again later." });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Login failed. Try again later.", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

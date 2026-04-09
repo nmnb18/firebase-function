@@ -4,6 +4,7 @@ import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { PLAN_CONFIG } from "../../utils/constant";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -11,7 +12,7 @@ const corsHandler = cors({ origin: true });
 export const createOrderHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Only POST allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -20,17 +21,17 @@ export const createOrderHandler = (req: Request, res: Response): void => {
                 // Authenticate
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 if (!planId || !sellerId) {
-                    return res.status(400).json({ error: "Missing required fields" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing required fields", HttpStatus.BAD_REQUEST);
                 }
 
                 // Validate plan
                 const plan = PLAN_CONFIG[planId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
-                    return res.status(400).json({ error: "Invalid plan" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid plan", HttpStatus.BAD_REQUEST);
                 }
 
                 let finalAmount = plan.price;
@@ -98,8 +99,7 @@ export const createOrderHandler = (req: Request, res: Response): void => {
 
                 await db.collection("payments").doc(order.id).set(orderData);
 
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     order_id: order.id,
                     amount: order.amount,
                     currency: order.currency,
@@ -108,10 +108,10 @@ export const createOrderHandler = (req: Request, res: Response): void => {
                     discountAmount,
                     finalAmount: finalAmount,
                     originalAmount: plan.price,
-                });
+                }, HttpStatus.OK);
             } catch (error: any) {
                 console.error("Razorpay order creation error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: "Failed to create Razorpay order" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to create Razorpay order", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

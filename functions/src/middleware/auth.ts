@@ -1,4 +1,5 @@
 import { auth } from "../config/firebase";
+import jwt from "jsonwebtoken";
 
 export interface AuthenticatedUser {
     uid: string;
@@ -52,6 +53,26 @@ export const authenticateUser = async (authorizationHeader: string | undefined):
         } else {
             throw new AuthError("Invalid token", 401);
         }
+    }
+};
+
+/**
+ * Decode a token WITHOUT verifying expiry — used only for logout.
+ * Confirms the token structurally belongs to the claimed uid so a random
+ * uid cannot be used to revoke someone else's session.
+ * @throws AuthError if the header is missing, malformed, or uid doesn't match
+ */
+export const authenticateExpiredToken = (authorizationHeader: string | undefined, claimedUid: string): void => {
+    if (!authorizationHeader?.startsWith("Bearer ")) {
+        throw new AuthError("Missing or invalid Authorization header");
+    }
+    const token = authorizationHeader.split("Bearer ")[1];
+    const decoded: any = jwt.decode(token);
+    // Firebase ID tokens use `user_id` and `sub` — the `uid` shorthand is
+    // only mapped by Admin SDK's verifyIdToken(), not by jwt.decode().
+    const tokenUid = decoded?.user_id || decoded?.uid || decoded?.sub;
+    if (!tokenUid || tokenUid !== claimedUid) {
+        throw new AuthError("Token does not match provided uid");
     }
 };
 

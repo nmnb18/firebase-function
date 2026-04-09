@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -9,12 +10,12 @@ export const sellerAdvancedAnalyticsHandler = (req: Request, res: Response): voi
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
-                    return res.status(405).json({ error: "Only GET allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only GET allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 // Time windows
@@ -45,7 +46,7 @@ export const sellerAdvancedAnalyticsHandler = (req: Request, res: Response): voi
                 ]);
 
                 if (profileQuery.empty) {
-                    return res.status(404).json({ error: "Seller profile not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Seller profile not found", HttpStatus.NOT_FOUND);
                 }
 
                 const profileDoc = profileQuery.docs[0];
@@ -55,9 +56,7 @@ export const sellerAdvancedAnalyticsHandler = (req: Request, res: Response): voi
 
                 // Block free tier
                 if (tier === "free") {
-                    return res.status(403).json({
-                        error: "Advanced analytics are available only on Pro or Premium plans.",
-                    });
+                    return sendError(res, ErrorCodes.FORBIDDEN, "Advanced analytics are available only on Pro or Premium plans.", HttpStatus.FORBIDDEN);
                 }
 
                 // Filter all documents by seller_id
@@ -357,49 +356,44 @@ export const sellerAdvancedAnalyticsHandler = (req: Request, res: Response): voi
                 };
 
                 // ----- FINAL RESPONSE -----
-                return res.status(200).json({
-                    success: true,
-                    data: {
-                        seller_id: sellerId,
-                        seller_name: sellerData?.business.shop_name ?? null,
-                        subscription_tier: tier,
+                return sendSuccess(res, {
+                    seller_id: sellerId,
+                    seller_name: sellerData?.business.shop_name ?? null,
+                    subscription_tier: tier,
 
-                        // A
-                        trends_7d: trends7,
-                        trends_30d: trends30,
+                    // A
+                    trends_7d: trends7,
+                    trends_30d: trends30,
 
-                        // B
-                        new_vs_returning_30d: newVsReturning,
+                    // B
+                    new_vs_returning_30d: newVsReturning,
 
-                        // C
-                        peak_hours: peakHours,
-                        peak_days: peakDays,
+                    // C
+                    peak_hours: peakHours,
+                    peak_days: peakDays,
 
-                        // D
-                        qr_type_breakdown: qrTypeBreakdown,
-                        qr_type_points: qrTypePointsMap,
+                    // D
+                    qr_type_breakdown: qrTypeBreakdown,
+                    qr_type_points: qrTypePointsMap,
 
-                        // E
-                        top_customers: topCustomers,
+                    // E
+                    top_customers: topCustomers,
 
-                        // F
-                        reward_funnel: rewardFunnel,
+                    // F
+                    reward_funnel: rewardFunnel,
 
-                        // G
-                        segments,
+                    // G
+                    segments,
 
-                        // H
-                        redemption_analytics: redemptionAnalytics,
+                    // H
+                    redemption_analytics: redemptionAnalytics,
 
-                        // I
-                        export_available: tier === "premium",
-                    },
-                });
+                    // I
+                    export_available: tier === "premium",
+                }, HttpStatus.OK);
             } catch (error: any) {
                 console.error("sellerAdvancedAnalytics error:", error);
-                return res
-                    .status(500)
-                    .json({ error: error.message || "Server error in advanced analytics" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Server error in advanced analytics", HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

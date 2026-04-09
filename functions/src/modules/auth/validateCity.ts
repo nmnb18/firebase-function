@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import cors from "cors";
 import { adminRef, db } from "../../config/firebase";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -10,7 +11,7 @@ export const validateCityHandler = (req: Request, res: Response): void => {
                 const { city } = req.body;
 
                 if (!city) {
-                    return res.status(400).json({ error: "City is required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "City is required", HttpStatus.BAD_REQUEST);
                 }
 
                 const cityKey = city.toLowerCase().trim();
@@ -21,7 +22,7 @@ export const validateCityHandler = (req: Request, res: Response): void => {
                     .get();
 
                 if (!configSnap.exists) {
-                    return res.status(500).json({ error: "City config missing" });
+                    return sendError(res, ErrorCodes.INTERNAL_ERROR, "City config missing", HttpStatus.INTERNAL_SERVER_ERROR);
                 }
 
                 const {
@@ -31,10 +32,7 @@ export const validateCityHandler = (req: Request, res: Response): void => {
                 } = configSnap.data()!;
 
                 if (enabled_cities.includes(cityKey)) {
-                    return res.status(200).json({
-                        status: "ENABLED",
-                        city: cityKey,
-                    });
+                    return sendSuccess(res, { status: "ENABLED", city: cityKey }, HttpStatus.OK);
                 }
 
                 // 🔔 Save enquiry (fire & forget)
@@ -47,13 +45,10 @@ export const validateCityHandler = (req: Request, res: Response): void => {
                     { merge: true }
                 );
 
-                return res.status(200).json({
-                    status: "COMING_SOON",
-                    city: cityKey,
-                });
+                return sendSuccess(res, { status: "COMING_SOON", city: cityKey }, HttpStatus.OK);
             } catch (err: any) {
                 console.error("validateCity error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: "Failed to validate city" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to validate city", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

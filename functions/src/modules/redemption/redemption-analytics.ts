@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -10,12 +11,12 @@ export const redemptionAnalyticsHandler = (req: Request, res: Response): void =>
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
-                    return res.status(405).json({ error: "Only GET allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only GET allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 // Parallel: Get seller profile + redemptions (filtered by seller)
@@ -30,7 +31,7 @@ export const redemptionAnalyticsHandler = (req: Request, res: Response): void =>
                 ]);
 
                 if (profileQuery.empty) {
-                    return res.status(404).json({ error: "Seller profile not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Seller profile not found", HttpStatus.NOT_FOUND);
                 }
 
                 const profileDoc = profileQuery.docs[0];
@@ -188,22 +189,19 @@ export const redemptionAnalyticsHandler = (req: Request, res: Response): void =>
                         return acc;
                     }, {} as Record<string, number>);
 
-                return res.status(200).json({
-                    success: true,
-                    data: {
-                        seller_id: sellerId,
-                        seller_name: sellerData?.business.shop_name,
-                        subscription_tier: tier,
-                        metrics,
-                        top_customers: topCustomers,
-                        value_distribution: valueDistribution,
-                        redemptions: redemptions.slice(0, 50) // Return recent redemptions
-                    }
-                });
+                return sendSuccess(res, {
+                    seller_id: sellerId,
+                    seller_name: sellerData?.business.shop_name,
+                    subscription_tier: tier,
+                    metrics,
+                    top_customers: topCustomers,
+                    value_distribution: valueDistribution,
+                    redemptions: redemptions.slice(0, 50) // Return recent redemptions
+                }, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Redemption analytics error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

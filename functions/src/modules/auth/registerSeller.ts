@@ -8,6 +8,7 @@ import {
     getSubscriptionPrice,
     sendVerificationEmail
 } from "../../utils/helper";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -57,7 +58,7 @@ interface RegisterSellerData {
 export const registerSellerHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "POST method required" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST method required", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -94,15 +95,11 @@ export const registerSellerHandler = (req: Request, res: Response): void => {
                 } = data;
                 console.error(data);
                 if (!email || !password || !name || !shopName) {
-                    return res.status(400).json({
-                        error: "Missing required fields: email, password, name, shopName",
-                    });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing required fields: email, password, name, shopName", HttpStatus.BAD_REQUEST);
                 }
 
                 if (!acceptTerms) {
-                    return res.status(400).json({
-                        error: "You must accept the terms and conditions",
-                    });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "You must accept the terms and conditions", HttpStatus.BAD_REQUEST);
                 }
 
                 // ------------------------------
@@ -259,29 +256,23 @@ export const registerSellerHandler = (req: Request, res: Response): void => {
                 // ------------------------------
                 // 🎉 Success Response
                 // ------------------------------
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     message: "Seller registered successfully",
-                    data: {
-                        uid: user.uid,
-                        email,
-                        name,
-                        shopName,
-                        role: "seller",
-                    },
-                });
+                    uid: user.uid,
+                    email,
+                    name,
+                    shopName,
+                    role: "seller",
+                }, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Registration Error:", error);
 
                 if (error.code === "auth/email-already-exists") {
-                    return res.status(400).json({ error: "Email already exists" });
+                    return sendError(res, ErrorCodes.ALREADY_EXISTS, "Email already exists", HttpStatus.BAD_REQUEST);
                 }
 
-                return res.status(error.statusCode ?? 500).json({
-                    error: "Registration failed. Please try again.",
-                    details: error.message,
-                });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Registration failed. Please try again.", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

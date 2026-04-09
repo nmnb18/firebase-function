@@ -1,7 +1,21 @@
 import admin from "firebase-admin";
 
 if (!admin.apps.length) {
-  admin.initializeApp();
+  // In Cloud Functions, FIREBASE_CONFIG is auto-set; locally use env vars
+  if (process.env.FIREBASE_CONFIG) {
+    admin.initializeApp();
+  } else {
+    admin.initializeApp({
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+      credential: process.env.GOOGLE_APPLICATION_CREDENTIALS
+        ? admin.credential.applicationDefault()
+        : admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+          }),
+    });
+  }
 }
 
 const isEmulator = !!process.env.FIRESTORE_EMULATOR_HOST;

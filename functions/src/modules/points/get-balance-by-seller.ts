@@ -2,13 +2,14 @@ import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const getBalanceBySellerHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -16,8 +17,7 @@ export const getBalanceBySellerHandler = (req: Request, res: Response): void => 
                 const sellerId = req.query.seller_id as string;
 
                 if (!sellerId) {
-                    console.log('here', req)
-                    return res.status(400).json({ error: "seller_id is required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "seller_id is required", HttpStatus.BAD_REQUEST);
                 }
 
                 // ------------------------------------------
@@ -32,7 +32,7 @@ export const getBalanceBySellerHandler = (req: Request, res: Response): void => 
                 ]);
 
                 if (pointsSnapshot.empty) {
-                    return res.status(200).json({});
+                    return sendSuccess(res, {}, HttpStatus.OK);
                 }
 
                 // ------------------------------------------
@@ -68,11 +68,11 @@ export const getBalanceBySellerHandler = (req: Request, res: Response): void => 
                 };
 
 
-                return res.status(200).json(balance);
+                return sendSuccess(res, balance, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Get single seller balance error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

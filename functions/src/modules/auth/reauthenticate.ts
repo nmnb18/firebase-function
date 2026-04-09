@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { auth } from "../../config/firebase";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -8,14 +9,14 @@ export const reauthenticateHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
-                    return res.status(405).json({ error: "POST only" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const { currentPassword } = req.body;
                 const authHeader = req.headers.authorization;
 
                 if (!authHeader) {
-                    return res.status(401).json({ error: "Missing token" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Missing token", HttpStatus.UNAUTHORIZED);
                 }
 
                 const idToken = authHeader.replace("Bearer ", "").trim();
@@ -23,11 +24,11 @@ export const reauthenticateHandler = (req: Request, res: Response): void => {
 
                 const email = decoded.email;
                 if (!email) {
-                    return res.status(400).json({ error: "Email not found" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Email not found", HttpStatus.BAD_REQUEST);
                 }
 
                 if (!currentPassword) {
-                    return res.status(400).json({ error: "Current password required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Current password required", HttpStatus.BAD_REQUEST);
                 }
 
                 const API_KEY = process.env.API_KEY;
@@ -49,14 +50,14 @@ export const reauthenticateHandler = (req: Request, res: Response): void => {
                 const result = await response.json() as any;
 
                 if (result.error) {
-                    return res.status(400).json({ error: "Incorrect password" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Incorrect password", HttpStatus.BAD_REQUEST);
                 }
 
-                return res.status(200).json({ success: true });
+                return sendSuccess(res, { message: "Authenticated successfully" }, HttpStatus.OK);
 
             } catch (err: any) {
                 console.error("reauthenticate error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: "Reauth failed" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Reauth failed", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

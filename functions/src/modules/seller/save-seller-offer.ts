@@ -3,6 +3,7 @@ import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -11,34 +12,34 @@ export const saveSellerOfferHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST")
-                    return res.status(405).json({ error: "POST only" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
 
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid)
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
 
                 const { date, start_date, end_date, offers } = req.body;
                 const seller_id = currentUser.uid;
 
                 if (!Array.isArray(offers))
-                    return res.status(400).json({ error: "Offers required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Offers required", HttpStatus.BAD_REQUEST);
 
                 if (offers.length < 2 || offers.length > 15)
-                    return res.status(400).json({ error: "Offers must be between 2–15 items" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Offers must be between 2–15 items", HttpStatus.BAD_REQUEST);
 
                 // ---- Resolve dates ----
                 let dates: string[] = [];
 
                 if (date) {
                     if (!DATE_REGEX.test(date))
-                        return res.status(400).json({ error: "Invalid date format (YYYY-MM-DD)" });
+                        return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid date format (YYYY-MM-DD)", HttpStatus.BAD_REQUEST);
                     dates = [date];
                 } else if (start_date && end_date) {
                     if (!DATE_REGEX.test(start_date) || !DATE_REGEX.test(end_date))
-                        return res.status(400).json({ error: "Invalid date format (YYYY-MM-DD)" });
+                        return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid date format (YYYY-MM-DD)", HttpStatus.BAD_REQUEST);
 
                     if (start_date > end_date)
-                        return res.status(400).json({ error: "start_date cannot be after end_date" });
+                        return sendError(res, ErrorCodes.INVALID_INPUT, "start_date cannot be after end_date", HttpStatus.BAD_REQUEST);
 
                     let current = new Date(start_date);
                     const end = new Date(end_date);
@@ -48,17 +49,13 @@ export const saveSellerOfferHandler = (req: Request, res: Response): void => {
                         current.setDate(current.getDate() + 1);
                     }
                 } else {
-                    return res.status(400).json({
-                        error: "Provide either date or start_date & end_date"
-                    });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Provide either date or start_date & end_date", HttpStatus.BAD_REQUEST);
                 }
 
                 const today = new Date().toISOString().slice(0, 10);
 
                 if (dates.some(d => d <= today))
-                    return res.status(403).json({
-                        error: "Cannot modify active or past dates"
-                    });
+                    return sendError(res, ErrorCodes.FORBIDDEN, "Cannot modify active or past dates", HttpStatus.FORBIDDEN);
 
                 // ---- Normalize offers ----
                 const formattedOffers = offers.map((o: any) => ({
@@ -92,13 +89,10 @@ export const saveSellerOfferHandler = (req: Request, res: Response): void => {
                 await batch.commit();
                 const cacheKey = `seller_offers:${seller_id}`;
                 cache.delete(cacheKey);
-                return res.status(200).json({
-                    success: true,
-                    dates_saved: dates.length
-                });
+                return sendSuccess(res, { dates_saved: dates.length }, HttpStatus.OK);
             } catch (err: any) {
                 console.error("saveSellerOffer error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: err.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

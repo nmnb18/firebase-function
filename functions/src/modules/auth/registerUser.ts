@@ -3,6 +3,7 @@ import { auth, db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import crypto from "crypto";
 import { resolveCityStatus, sendVerificationEmail } from "../../utils/helper";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -26,7 +27,7 @@ export const registerUserHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
 
         if (req.method !== "POST") {
-            return res.status(405).json({ error: "POST method required" });
+            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST method required", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         try {
@@ -50,21 +51,15 @@ export const registerUserHandler = (req: Request, res: Response): void => {
             // VALIDATION
             // ---------------------------------------------
             if (!name || !email || !phone || !password) {
-                return res.status(400).json({
-                    error: "Missing required fields: name, email, phone, password",
-                });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing required fields: name, email, phone, password", HttpStatus.BAD_REQUEST);
             }
 
             if (!street || !city || !state || !pincode) {
-                return res.status(400).json({
-                    error: "Complete address is required",
-                });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Complete address is required", HttpStatus.BAD_REQUEST);
             }
 
             if (!lat || !lng) {
-                return res.status(400).json({
-                    error: "Location coordinates required",
-                });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Location coordinates required", HttpStatus.BAD_REQUEST);
             }
 
             // ---------------------------------------------
@@ -72,7 +67,7 @@ export const registerUserHandler = (req: Request, res: Response): void => {
             // ---------------------------------------------
             const emailExists = await auth.getUserByEmail(email).catch(() => null);
             if (emailExists) {
-                return res.status(400).json({ error: "Email already exists" });
+                return sendError(res, ErrorCodes.ALREADY_EXISTS, "Email already exists", HttpStatus.BAD_REQUEST);
             }
 
             const phoneQuery = await db
@@ -82,7 +77,7 @@ export const registerUserHandler = (req: Request, res: Response): void => {
                 .get();
 
             if (!phoneQuery.empty) {
-                return res.status(400).json({ error: "Phone already in use" });
+                return sendError(res, ErrorCodes.ALREADY_EXISTS, "Phone already in use", HttpStatus.BAD_REQUEST);
             }
 
             // ---------------------------------------------
@@ -177,29 +172,24 @@ export const registerUserHandler = (req: Request, res: Response): void => {
                 await sendVerificationEmail(email, name, verificationToken);
             } catch { }
 
-            return res.status(200).json({
-                success: true,
+            return sendSuccess(res, {
                 message: "User registered successfully",
-                data: {
-                    uid: user.uid,
-                    email,
-                    name,
-                    phone,
-                    role: "user",
-                    city_status: cityStatus
-                },
-            });
+                uid: user.uid,
+                email,
+                name,
+                phone,
+                role: "user",
+                city_status: cityStatus
+            }, HttpStatus.OK);
 
         } catch (error: any) {
             console.error("Registration Error:", error);
 
             if (error.code === "auth/email-already-exists") {
-                return res.status(400).json({ error: "Email already exists" });
+                return sendError(res, ErrorCodes.ALREADY_EXISTS, "Email already exists", HttpStatus.BAD_REQUEST);
             }
 
-            return res.status(error.statusCode ?? 500).json({
-                error: "Registration failed. Please try again later.",
-            });
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Registration failed", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
         }
     });
 };

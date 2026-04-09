@@ -5,13 +5,14 @@ import cors from "cors";
 import { Redemption } from "../../types/redemption";
 import { saveNotification } from "../../utils/helper";
 import pushService, { NotificationChannel, NotificationType } from "../../services/expo-service";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const processRedemptionHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -21,7 +22,7 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                 const { redemption_id, seller_notes } = req.body;
 
                 if (!redemption_id) {
-                    return res.status(400).json({ error: "redemption_id is required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "redemption_id is required", HttpStatus.BAD_REQUEST);
                 }
 
                 // 1. Verify seller owns this redemption
@@ -29,21 +30,19 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                 const redemptionDoc = await redemptionRef.get();
 
                 if (!redemptionDoc.exists) {
-                    return res.status(404).json({ error: "Redemption not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Redemption not found", HttpStatus.NOT_FOUND);
                 }
 
                 const redemption = redemptionDoc.data() as Redemption;
 
                 // Check if seller matches
                 if (redemption.seller_id !== sellerUser.uid) {
-                    return res.status(403).json({ error: "Not authorized to process this redemption" });
+                    return sendError(res, ErrorCodes.FORBIDDEN, "Not authorized to process this redemption", HttpStatus.FORBIDDEN);
                 }
 
                 // 2. Check redemption status
                 if (redemption.status !== "pending") {
-                    return res.status(400).json({
-                        error: `Redemption already ${redemption.status}`
-                    });
+                    return sendError(res, ErrorCodes.REDEMPTION_ALREADY_PROCESSED, `Redemption already ${redemption.status}`, HttpStatus.BAD_REQUEST);
                 }
 
                 // 3. Checl if QR is expired
@@ -67,75 +66,85 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                     // Release point hold
                     await releasePointHold(redemption_id);
 
-                    return res.status(400).json({
-                        error: "QR code has expired. Please ask customer to regenerate."
-                    });
+                    return sendError(res, ErrorCodes.QR_EXPIRED, "QR code has expired. Please ask customer to regenerate.", HttpStatus.BAD_REQUEST);
                 }
 
-                // 4. Deduct points from user
+                // 4. Fetch points document and validate balance
                 const pointsQuery = await db.collection("points")
                     .where("user_id", "==", redemption.user_id)
                     .where("seller_id", "==", redemption.seller_id)
                     .limit(1)
                     .get();
 
-                if (!pointsQuery.empty) {
-                    const pointsDoc = pointsQuery.docs[0];
-                    const currentPoints = pointsDoc.data().points || 0;
-
-                    if (currentPoints < Number(redemption.points)) {
-                        // User doesn't have enough points (shouldn't happen with point holds)
-                        await redemptionRef.update({
-                            status: "cancelled",
-                            updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
-                            metadata: {
-                                ...redemption.metadata,
-                                seller_notes: seller_notes || "Insufficient points"
-                            }
-                        });
-
-                        // Release point hold
-                        await releasePointHold(redemption_id);
-
-                        return res.status(400).json({ error: "User has insufficient points" });
-                    }
-
-                    // Deduct points
-                    const newPoints = currentPoints - Number(redemption.points);
-                    await pointsDoc.ref.update({
-                        points: newPoints,
-                        last_updated: adminRef.firestore.FieldValue.serverTimestamp()
-                    });
+                if (pointsQuery.empty) {
+                    return sendError(res, ErrorCodes.NOT_FOUND, "No points record found for this user-seller pair", HttpStatus.BAD_REQUEST);
                 }
 
-                // Parallel writes: redemption update + transaction + seller stats update
-                const sellerRef = db.collection("seller_profiles").doc(redemption.seller_id);
-                await Promise.all([
-                    redemptionRef.update({
-                        status: "redeemed",
-                        redeemed_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                const pointsDoc = pointsQuery.docs[0];
+                const currentPoints = pointsDoc.data().points || 0;
+
+                if (currentPoints < Number(redemption.points)) {
+                    // User doesn't have enough points (shouldn't happen with point holds)
+                    await redemptionRef.update({
+                        status: "cancelled",
                         updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                         metadata: {
                             ...redemption.metadata,
-                            seller_notes: seller_notes || ""
+                            seller_notes: seller_notes || "Insufficient points"
                         }
-                    }),
-                    db.collection("transactions").add({
-                        user_id: redemption.user_id,
-                        seller_id: redemption.seller_id,
-                        customer_name: redemption.user_name,
-                        seller_name: redemption.seller_shop_name,
-                        points: -Number(redemption.points),
-                        transaction_type: "redeem",
-                        redemption_id: redemption_id,
-                        timestamp: adminRef.firestore.FieldValue.serverTimestamp(),
-                        description: `Redeemed ${redemption.points} points via QR`
-                    }),
-                    sellerRef.update({
-                        "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(Number(redemption.points)),
-                        "stats.total_redemptions": adminRef.firestore.FieldValue.increment(1)
-                    })
-                ]);
+                    });
+
+                    // Release point hold
+                    await releasePointHold(redemption_id);
+
+                    return sendError(res, ErrorCodes.INSUFFICIENT_POINTS, "User has insufficient points", HttpStatus.BAD_REQUEST);
+                }
+
+                // 5. ATOMIC BATCH WRITE: points deduction + redemption status + transaction + seller stats
+                const batch = db.batch();
+                const sellerRef = db.collection("seller_profiles").doc(redemption.seller_id);
+                const transactionRef = db.collection("transactions").doc(); // Generate new doc ID
+
+                // Deduct points
+                const newPoints = currentPoints - Number(redemption.points);
+                batch.update(pointsDoc.ref, {
+                    points: newPoints,
+                    last_updated: adminRef.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Mark redemption as redeemed
+                batch.update(redemptionRef, {
+                    status: "redeemed",
+                    redeemed_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    metadata: {
+                        ...redemption.metadata,
+                        seller_notes: seller_notes || ""
+                    }
+                });
+
+                // Create transaction record
+                batch.set(transactionRef, {
+                    user_id: redemption.user_id,
+                    seller_id: redemption.seller_id,
+                    customer_name: redemption.user_name,
+                    seller_name: redemption.seller_shop_name,
+                    points: -Number(redemption.points),
+                    transaction_type: "redeem",
+                    redemption_id: redemption_id,
+                    timestamp: adminRef.firestore.FieldValue.serverTimestamp(),
+                    created_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    description: `Redeemed ${redemption.points} points via QR`
+                });
+
+                // Update seller stats
+                batch.update(sellerRef, {
+                    "stats.total_points_redeemed": adminRef.firestore.FieldValue.increment(Number(redemption.points)),
+                    "stats.total_redemptions": adminRef.firestore.FieldValue.increment(1)
+                });
+
+                // Commit all writes atomically
+                await batch.commit();
 
                 // 8. Parallelize all notifications and token fetches
                 const [, tokenSnapUser, , tokenSnapSeller] = await Promise.all([
@@ -204,18 +213,17 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                 }
 
                 // 9. Return success response
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     message: "Redemption processed successfully",
                     redemption_id: redemption_id,
                     points_redeemed: Number(redemption.points),
                     user_name: redemption.user_name,
                     timestamp: new Date().toISOString()
-                });
+                }, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Process redemption error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Internal server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

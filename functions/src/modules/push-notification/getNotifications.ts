@@ -2,20 +2,21 @@ import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const getNotificationsHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
-                if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+                if (req.method !== "GET") return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
 
                 // Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
                 const userId = currentUser.uid;
 
                 if (!currentUser || !userId) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 // Optional query params
@@ -39,10 +40,10 @@ export const getNotificationsHandler = (req: Request, res: Response): void => {
                     created_at: doc.data()?.created_at?.toDate?.() || null,
                 }));
 
-                return res.status(200).json({ success: true, notifications, total: notifications.length });
+                return sendSuccess(res, { notifications, total: notifications.length }, HttpStatus.OK);
             } catch (err: any) {
                 console.error("getUserNotifications Error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: err.message || "Internal server error" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message || "Internal server error", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

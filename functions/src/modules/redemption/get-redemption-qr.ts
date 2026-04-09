@@ -4,13 +4,14 @@ import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 import { generateQRBase64 } from "../../utils/qr-helper";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const getRedemptionQRHandler = (req: Request, res: Response): void => {
     corsHandler(req, res, async () => {
         if (req.method !== "GET") {
-            return res.status(405).json({ error: "Method not allowed" });
+            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
         }
 
         try {
@@ -19,7 +20,7 @@ export const getRedemptionQRHandler = (req: Request, res: Response): void => {
             const { redemption_id } = req.query;
 
             if (!redemption_id) {
-                return res.status(400).json({ error: "redemption_id is required" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "redemption_id is required", HttpStatus.BAD_REQUEST);
             }
 
             // Find redemption by redemption_id (not document ID)
@@ -29,7 +30,7 @@ export const getRedemptionQRHandler = (req: Request, res: Response): void => {
                 .get();
 
             if (redemptionsQuery.empty) {
-                return res.status(404).json({ error: "Redemption not found" });
+                return sendError(res, ErrorCodes.NOT_FOUND, "Redemption not found", HttpStatus.NOT_FOUND);
             }
 
             const redemptionDoc = redemptionsQuery.docs[0];
@@ -37,12 +38,11 @@ export const getRedemptionQRHandler = (req: Request, res: Response): void => {
 
             // Verify the redemption belongs to the current user
             if (redemptionData.user_id !== currentUser.uid) {
-                return res.status(403).json({ error: "Not authorized to view this redemption" });
+                return sendError(res, ErrorCodes.FORBIDDEN, "Not authorized to view this redemption", HttpStatus.FORBIDDEN);
             }
             const qrBase64 = await generateQRBase64(redemptionData.qr_data);
             // Return only QR-related data
-            return res.status(200).json({
-                success: true,
+            return sendSuccess(res, {
                 redemption_id: redemptionData.redemption_id,
                 qr_code_base64: qrBase64,
                 qr_data: redemptionData.qr_data,
@@ -50,11 +50,11 @@ export const getRedemptionQRHandler = (req: Request, res: Response): void => {
                 expires_at: redemptionData.expires_at?.toDate?.() || redemptionData.expires_at,
                 seller_shop_name: redemptionData.seller_shop_name,
                 points: redemptionData.points
-            });
+            }, HttpStatus.OK);
 
         } catch (error: any) {
             console.error("Get redemption QR error:", error);
-            return res.status(error.statusCode ?? 500).json({ error: error.message });
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
         }
     });
 };

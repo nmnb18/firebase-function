@@ -19,6 +19,7 @@ functions/node_modules/
 
 # Local secrets & config
 functions/.env
+functions/.env.local
 functions/.secret.local
 functions/.runtimeconfig.json
 

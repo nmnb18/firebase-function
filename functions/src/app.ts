@@ -76,86 +76,107 @@ import { getUserPerksHandler } from "./modules/user/get-user-perks";
 import { redeemTodayOfferHandler } from "./modules/user/redeem-today-offer";
 import { updateUserProfileHandler } from "./modules/user/update-user";
 
+// UPI
+import { getSellerByVPAHandler } from "./modules/upi/get-seller-by-vpa";
+import { createUPIPaymentOrderHandler } from "./modules/upi/create-upi-payment-order";
+import { confirmUPIPaymentAndAwardPointsHandler } from "./modules/upi/confirm-upi-payment-and-award-points";
+import { razorpayWebhookHandler } from "./modules/upi/razorpay-webhook";
+
 const app = express();
 app.use(cors({ origin: true }));
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({
+    limit: "10mb",
+    // Capture the raw body buffer so the Razorpay webhook handler can
+    // verify the X-Razorpay-Signature without re-serialising the payload.
+    verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
+
+const router = express.Router();
 
 // Warmup
-app.get("/warmup", (_req, res) => res.status(200).json({ status: "warm" }));
+router.get("/warmup", (_req, res) => res.status(200).json({ status: "warm" }));
 
 // Auth
-app.post("/loginUser", loginUserHandler);
-app.post("/loginSeller", loginSellerHandler);
-app.post("/registerUser", registerUserHandler);
-app.post("/registerSeller", registerSellerHandler);
-app.post("/phoneLogin", phoneLoginHandler);
-app.post("/logout", logoutHandler);
-app.post("/refreshToken", refreshTokenHandler);
-app.post("/changePassword", changePasswordHandler);
-app.post("/requestPasswordReset", requestPasswordResetHandler);
-app.post("/confirmPasswordReset", confirmPasswordResetHandler);
-app.post("/reauthenticate", reauthenticateHandler);
-app.delete("/deleteUser", deleteUserHandler);
-app.delete("/deleteSellerAccount", deleteSellerAccountHandler);
-app.get("/verifyEmail", verifyEmailHandler);
-app.post("/validateCity", validateCityHandler);
+router.post("/loginUser", loginUserHandler);
+router.post("/loginSeller", loginSellerHandler);
+router.post("/registerUser", registerUserHandler);
+router.post("/registerSeller", registerSellerHandler);
+router.post("/phoneLogin", phoneLoginHandler);
+router.post("/logout", logoutHandler);
+router.post("/refreshToken", refreshTokenHandler);
+router.post("/changePassword", changePasswordHandler);
+router.post("/requestPasswordReset", requestPasswordResetHandler);
+router.post("/confirmPasswordReset", confirmPasswordResetHandler);
+router.post("/reauthenticate", reauthenticateHandler);
+router.delete("/deleteUser", deleteUserHandler);
+router.delete("/deleteSellerAccount", deleteSellerAccountHandler);
+router.get("/verifyEmail", verifyEmailHandler);
+router.post("/validateCity", validateCityHandler);
 
 // User
-app.get("/getUserDetails", getUserDetailsHandler);
-app.patch("/updateUserProfile", updateUserProfileHandler);
-app.get("/getUserPerks", getUserPerksHandler);
-app.post("/assignTodayOffer", assignTodayOfferHandler);
-app.get("/getTodayOfferStatus", getTodayOfferStatusHandler);
-app.post("/redeemTodayOffer", redeemTodayOfferHandler);
+router.get("/getUserDetails", getUserDetailsHandler);
+router.patch("/updateUserProfile", updateUserProfileHandler);
+router.get("/getUserPerks", getUserPerksHandler);
+router.post("/assignTodayOffer", assignTodayOfferHandler);
+router.get("/getTodayOfferStatus", getTodayOfferStatusHandler);
+router.post("/redeemTodayOffer", redeemTodayOfferHandler);
 
 // Seller
-app.get("/getSellerDetails", getSellerDetailsHandler);
-app.patch("/updateSellerProfile", updateSellerProfileHandler);
-app.post("/updateSellerMedia", updateSellerMediaHandler);
-app.get("/getNearbySellers", getNearbySellersHandler);
-app.get("/getSellerOffers", getSellerOffersHandler);
-app.post("/saveSellerOffer", saveSellerOfferHandler);
-app.delete("/deleteSellerOffer", deleteSellerOfferHandler);
-app.get("/getSellerOfferById", getSellerOfferByIdHandler);
-app.get("/getSubscriptionHistory", getSubscriptionHistoryHandler);
-app.get("/getSellerRedeemedPerks", getSellerRedeemedPerksHandler);
-app.get("/sellerAdvancedAnalytics", sellerAdvancedAnalyticsHandler);
+router.get("/getSellerDetails", getSellerDetailsHandler);
+router.patch("/updateSellerProfile", updateSellerProfileHandler);
+router.post("/updateSellerMedia", updateSellerMediaHandler);
+router.get("/getNearbySellers", getNearbySellersHandler);
+router.get("/getSellerOffers", getSellerOffersHandler);
+router.post("/saveSellerOffer", saveSellerOfferHandler);
+router.delete("/deleteSellerOffer", deleteSellerOfferHandler);
+router.get("/getSellerOfferById", getSellerOfferByIdHandler);
+router.get("/getSubscriptionHistory", getSubscriptionHistoryHandler);
+router.get("/getSellerRedeemedPerks", getSellerRedeemedPerksHandler);
+router.get("/sellerAdvancedAnalytics", sellerAdvancedAnalyticsHandler);
 
 // Points
-app.get("/getPointsBalance", getPointsBalanceHandler);
-app.get("/getBalanceBySeller", getBalanceBySellerHandler);
-app.get("/getTransactions", getTransactionsHandler);
+router.get("/getPointsBalance", getPointsBalanceHandler);
+router.get("/getBalanceBySeller", getBalanceBySellerHandler);
+router.get("/getTransactions", getTransactionsHandler);
 
 // Redemption
-app.post("/createRedemption", createRedemptionHandler);
-app.get("/getUserRedemptions", getUserRedemptionsHandler);
-app.get("/getSellerRedemptions", getSellerRedemptionsHandler);
-app.post("/processRedemption", processRedemptionHandler);
-app.post("/cancelRedemption", cancelRedemptionHandler);
-app.get("/getRedemptionQR", getRedemptionQRHandler);
-app.get("/getRedemptionStatus", getRedemptionStatusHandler);
-app.post("/markRedemptionAsExpired", markRedemptionAsExpiredHandler);
-app.get("/redemptionAnalytics", redemptionAnalyticsHandler);
-app.post("/verifyRedeemCode", verifyRedeemCodeHandler);
+router.post("/createRedemption", createRedemptionHandler);
+router.get("/getUserRedemptions", getUserRedemptionsHandler);
+router.get("/getSellerRedemptions", getSellerRedemptionsHandler);
+router.post("/processRedemption", processRedemptionHandler);
+router.post("/cancelRedemption", cancelRedemptionHandler);
+router.get("/getRedemptionQR", getRedemptionQRHandler);
+router.get("/getRedemptionStatus", getRedemptionStatusHandler);
+router.post("/markRedemptionAsExpired", markRedemptionAsExpiredHandler);
+router.get("/redemptionAnalytics", redemptionAnalyticsHandler);
+router.post("/verifyRedeemCode", verifyRedeemCodeHandler);
 
 // QR Code
-app.get("/generateUserQR", generateUserQRHandler);
-app.post("/scanUserQRCode", scanUserQRCodeHandler);
+router.get("/generateUserQR", generateUserQRHandler);
+router.post("/scanUserQRCode", scanUserQRCodeHandler);
 
 // Payments
-app.post("/applyCoupon", applyCouponHandler);
-app.post("/createOrder", createOrderHandler);
-app.post("/verifyPayment", verifyPaymentHandler);
-app.post("/verifyIAPPurchase", verifyIAPPurchaseHandler);
+router.post("/applyCoupon", applyCouponHandler);
+router.post("/createOrder", createOrderHandler);
+router.post("/verifyPayment", verifyPaymentHandler);
+router.post("/verifyIAPPurchase", verifyIAPPurchaseHandler);
+
+// UPI
+router.get("/getSellerByVPA", getSellerByVPAHandler);
+router.post("/createUPIPaymentOrder", createUPIPaymentOrderHandler);
+router.post("/confirmUPIPaymentAndAwardPoints", confirmUPIPaymentAndAwardPointsHandler);
+router.post("/razorpayWebhook", razorpayWebhookHandler);
 
 // Push Notifications
-app.post("/registerPushToken", registerPushTokenHandler);
-app.post("/unregisterPushToken", unregisterPushTokenHandler);
-app.get("/getNotifications", getNotificationsHandler);
-app.get("/getUnreadNotificationCount", getUnreadNotificationCountHandler);
-app.post("/markNotificationsRead", markNotificationsReadHandler);
+router.post("/registerPushToken", registerPushTokenHandler);
+router.post("/unregisterPushToken", unregisterPushTokenHandler);
+router.get("/getNotifications", getNotificationsHandler);
+router.get("/getUnreadNotificationCount", getUnreadNotificationCountHandler);
+router.post("/markNotificationsRead", markNotificationsReadHandler);
 
 // Dashboard
-app.get("/sellerStats", sellerStatsHandler);
+router.get("/sellerStats", sellerStatsHandler);
+
+app.use("/api", router);
 
 export { app };

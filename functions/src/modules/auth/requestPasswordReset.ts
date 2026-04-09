@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -7,18 +8,18 @@ export const requestPasswordResetHandler = (req: Request, res: Response): void =
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Only POST allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             const { email } = req.body;
 
             if (!email) {
-                return res.status(400).json({ error: "Email is required" });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Email is required", HttpStatus.BAD_REQUEST);
             }
 
             const apiKey = process.env.API_KEY;
             if (!apiKey) {
-                return res.status(500).json({ error: "Missing Firebase API Key" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Missing Firebase API Key", HttpStatus.INTERNAL_SERVER_ERROR);
             }
 
             const payload = {
@@ -38,16 +39,13 @@ export const requestPasswordResetHandler = (req: Request, res: Response): void =
             const data = await response.json() as any;
 
             if (data.error) {
-                return res.status(400).json({ error: data.error.message });
+                return sendError(res, ErrorCodes.INVALID_INPUT, data.error.message, HttpStatus.BAD_REQUEST);
             }
 
-            return res.status(200).json({
-                success: true,
-                message: "Password reset email sent."
-            });
+            return sendSuccess(res, { message: "Password reset email sent." }, HttpStatus.OK);
 
         } catch (err: any) {
-            return res.status(err.statusCode ?? 500).json({ error: err.message });
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
         }
     });
 };

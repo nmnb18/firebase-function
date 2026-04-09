@@ -3,6 +3,7 @@ import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { PLAN_CONFIG } from "../../utils/constant";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -11,34 +12,28 @@ const couponCache: { [key: string]: { data: any, expires: number } } = {};
 export const applyCouponHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "POST") {
-                return res.status(405).json({ error: "Only POST allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
                 // Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
                 const { couponCode, planId, sellerId } = req.body;
                 if (!couponCode || !planId || !sellerId) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Missing required fields"
-                    });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing required fields", HttpStatus.BAD_REQUEST);
                 }
                 // Caching
                 const cacheKey = `${couponCode}_${planId}_${sellerId}`;
                 if (couponCache[cacheKey] && couponCache[cacheKey].expires > Date.now()) {
-                    return res.status(200).json(couponCache[cacheKey].data);
+                    return sendSuccess(res, couponCache[cacheKey].data, HttpStatus.OK);
                 }
                 // Validate plan
                 const plan = PLAN_CONFIG[planId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid plan selected"
-                    });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid plan selected", HttpStatus.BAD_REQUEST);
                 }
                 const planPrice = plan.price;
                 // Find active coupon
@@ -51,36 +46,24 @@ export const applyCouponHandler = (req: Request, res: Response): void => {
                     .limit(1)
                     .get();
                 if (couponsSnapshot.empty) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid or expired coupon code"
-                    });
+                    return sendError(res, ErrorCodes.COUPON_INVALID, "Invalid or expired coupon code", HttpStatus.BAD_REQUEST);
                 }
                 const couponDoc = couponsSnapshot.docs[0];
                 const coupon = couponDoc.data();
 
                 // Check usage limit
                 if (coupon.usedCount >= coupon.usageLimit) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "This coupon has reached its usage limit"
-                    });
+                    return sendError(res, ErrorCodes.LIMIT_EXCEEDED, "This coupon has reached its usage limit", HttpStatus.BAD_REQUEST);
                 }
 
                 // Check if coupon applies to this plan
                 if (coupon.applicablePlans && !coupon.applicablePlans.includes(planId)) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "This coupon is not valid for the selected plan"
-                    });
+                    return sendError(res, ErrorCodes.COUPON_INVALID, "This coupon is not valid for the selected plan", HttpStatus.BAD_REQUEST);
                 }
 
                 // Check minimum amount requirement
                 if (coupon.minAmount && planPrice < coupon.minAmount) {
-                    return res.status(400).json({
-                        success: false,
-                        message: `Minimum order amount of ₹${coupon.minAmount} required for this coupon`
-                    });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, `Minimum order amount of \u20B9${coupon.minAmount} required for this coupon`, HttpStatus.BAD_REQUEST);
                 }
 
                 // Calculate discount amount
@@ -109,14 +92,10 @@ export const applyCouponHandler = (req: Request, res: Response): void => {
                     .get();
 
                 if (!userUsageSnapshot.empty && coupon.oneTimeUse) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "You have already used this coupon"
-                    });
+                    return sendError(res, ErrorCodes.COUPON_INVALID, "You have already used this coupon", HttpStatus.BAD_REQUEST);
                 }
 
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     coupon: {
                         id: couponDoc.id,
                         code: coupon.code,
@@ -131,14 +110,11 @@ export const applyCouponHandler = (req: Request, res: Response): void => {
                     finalAmount: Math.round(finalAmount),
                     originalAmount: planPrice,
                     message: `Coupon applied successfully! ₹${Math.round(discountAmount)} discount`
-                });
+                }, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Apply coupon error:", error);
-                return res.status(error.statusCode ?? 500).json({
-                    success: false,
-                    message: "Failed to apply coupon"
-                });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to apply coupon", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

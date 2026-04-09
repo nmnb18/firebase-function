@@ -2,13 +2,14 @@ import { Request, Response } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
 export const getRedemptionStatusHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -17,7 +18,7 @@ export const getRedemptionStatusHandler = (req: Request, res: Response): void =>
 
                 const { redemption_id } = req.query;
                 if (!redemption_id) {
-                    return res.status(400).json({ error: "redemption_id is required" });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "redemption_id is required", HttpStatus.BAD_REQUEST);
                 }
 
                 // ✅ Find redemption by redemption_id
@@ -27,7 +28,7 @@ export const getRedemptionStatusHandler = (req: Request, res: Response): void =>
                     .get();
 
                 if (redemptionsQuery.empty) {
-                    return res.status(404).json({ error: "Redemption not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Redemption not found", HttpStatus.NOT_FOUND);
                 }
 
                 const redemptionDoc = redemptionsQuery.docs[0];
@@ -35,7 +36,7 @@ export const getRedemptionStatusHandler = (req: Request, res: Response): void =>
 
                 // ✅ Ownership check
                 if (redemptionData.user_id !== currentUser.uid) {
-                    return res.status(403).json({ error: "Not authorized to view this redemption" });
+                    return sendError(res, ErrorCodes.FORBIDDEN, "Not authorized to view this redemption", HttpStatus.FORBIDDEN);
                 }
 
                 // ✅ Auto-expire if past expires_at and still pending
@@ -58,20 +59,19 @@ export const getRedemptionStatusHandler = (req: Request, res: Response): void =>
                 }
 
                 // ✅ Return updated redemption object
-                return res.status(200).json({
-                    success: true,
+                return sendSuccess(res, {
                     redemption: {
                         ...redemptionData,
                         redemption_id: redemptionData.redemption_id,
                         created_at: redemptionData.created_at?.toDate?.() || redemptionData.created_at,
                         redeemed_at: redemptionData.redeemed_at?.toDate?.() || redemptionData.redeemed_at,
                         expires_at: redemptionData.expires_at?.toDate?.() || redemptionData.expires_at,
-                    },
-                });
+                    }
+                }, HttpStatus.OK);
 
             } catch (error: any) {
                 console.error("Get redemption status error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

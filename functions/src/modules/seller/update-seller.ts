@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { db, adminRef } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -52,21 +53,19 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
     corsHandler(req, res, async () => {
         try {
             if (req.method !== "PATCH") {
-                return res.status(405).json({ error: "PATCH method required" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "PATCH method required", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             // Authenticate
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser || !currentUser.uid) {
-                return res.status(401).json({ error: "Unauthorized" });
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
             }
 
             const { section, data } = req.body;
 
             if (!section || !data) {
-                return res.status(400).json({
-                    error: "Missing required fields: section, data",
-                });
+                return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing required fields: section, data", HttpStatus.BAD_REQUEST);
             }
 
             // Allowed updatable sections
@@ -76,12 +75,11 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
                 "location",
                 "verification",
                 "rewards",
+                "payment",
             ];
 
             if (!validSections.includes(section)) {
-                return res.status(400).json({
-                    error: `Invalid section. Allowed: ${validSections.join(", ")}`,
-                });
+                return sendError(res, ErrorCodes.INVALID_INPUT, `Invalid section. Allowed: ${validSections.join(", ")}`, HttpStatus.BAD_REQUEST);
             }
 
             const sellerId = currentUser.uid;
@@ -89,7 +87,7 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
             const sellerDoc = await sellerRef.get();
 
             if (!sellerDoc.exists) {
-                return res.status(404).json({ error: "Seller profile not found" });
+                return sendError(res, ErrorCodes.NOT_FOUND, "Seller profile not found", HttpStatus.NOT_FOUND);
             }
 
             const sellerProfile = sellerDoc.data() ?? {};
@@ -100,7 +98,12 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
             };
 
             // Handle rewards section specially for offer ID generation
-            if (section === "rewards") {
+            if (section === "payment") {
+                // Payment VPA is read-only — managed only through seller onboarding/setup
+                return sendError(res, ErrorCodes.FORBIDDEN, "Payment VPA cannot be updated through this endpoint. Manage VPA in profile setup.", HttpStatus.FORBIDDEN);
+            }
+            // Handle rewards section specially for offer ID generation
+            else if (section === "rewards") {
                 const existingRewards = sellerProfile.rewards || {};
                 const existingOffers = existingRewards.offers || [];
 
@@ -121,7 +124,6 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
                     ...otherRewardData
                 };
 
-                // ✅ ONLY update rewards once
                 updatePayload["rewards"] = updatedRewards;
             }
             else {
@@ -145,22 +147,19 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
             const updatedDoc = await sellerRef.get();
             const updatedData = updatedDoc.data();
 
-            return res.status(200).json({
-                success: true,
+            return sendSuccess(res, {
                 message: `${section} section updated successfully`,
                 updated: updatePayload,
                 seller_profile: updatedData
-            });
+            }, HttpStatus.OK);
         } catch (error: any) {
             console.error("Update seller profile error:", error);
 
             if (error.code === "auth/argument-error") {
-                return res.status(401).json({ error: "Invalid or expired token" });
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
             }
 
-            return res.status(error.statusCode ?? 500).json({
-                error: "Failed to update profile. Please try again.",
-            });
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to update profile. Please try again.", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
         }
     });
 };

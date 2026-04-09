@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -9,13 +10,13 @@ export const sellerStatsHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET") {
-                    return res.status(405).json({ error: "Only GET allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only GET allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 // Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 // Get seller profile
@@ -26,7 +27,7 @@ export const sellerStatsHandler = (req: Request, res: Response): void => {
                     .get();
 
                 if (profileSnap.empty) {
-                    return res.status(404).json({ error: "Seller profile not found" });
+                    return sendError(res, ErrorCodes.NOT_FOUND, "Seller profile not found", HttpStatus.NOT_FOUND);
                 }
 
                 const profileDoc = profileSnap.docs[0];
@@ -200,10 +201,10 @@ export const sellerStatsHandler = (req: Request, res: Response): void => {
                     points_redeemed: todayRedeemedPoints,
                 };
 
-                return res.status(200).json({ success: true, data: results });
+                return sendSuccess(res, results, HttpStatus.OK);
             } catch (error: any) {
                 console.error("sellerStats error:", error);
-                return res.status(error.statusCode ?? 500).json({ error: error.message || "Server error" });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

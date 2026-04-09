@@ -3,6 +3,7 @@ import { db } from "../../config/firebase";
 import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 const cache = createCache();
@@ -10,11 +11,11 @@ export const getSellerOffersHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "GET")
-                    return res.status(405).json({ error: "GET only" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
 
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid)
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
 
                 const seller_id = currentUser.uid;
                 const today = new Date().toISOString().slice(0, 10);
@@ -32,11 +33,8 @@ export const getSellerOffersHandler = (req: Request, res: Response): void => {
                     const docId = `${seller_id}_${requestedDate}`;
                     const doc = await db.collection("seller_daily_offers").doc(docId).get();
                     if (!doc.exists)
-                        return res.status(404).json({ error: "Offer not found for date" });
-                    return res.status(200).json({
-                        success: true,
-                        offer: { id: doc.id, ...doc.data() },
-                    });
+                        return sendError(res, ErrorCodes.NOT_FOUND, "Offer not found for date", HttpStatus.NOT_FOUND);
+                    return sendSuccess(res, { offer: { id: doc.id, ...doc.data() } }, HttpStatus.OK);
                 }
                 // MODE B: Fetch grouped offers (parallel)
                 const [activeSnap, upcomingSnap, expiredSnap] = await Promise.all([
@@ -65,10 +63,10 @@ export const getSellerOffersHandler = (req: Request, res: Response): void => {
                     expired: expiredSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
                 };
                 //cache.set(cacheKey, responseData, 60000);
-                return res.status(200).json(responseData);
+                return sendSuccess(res, { today, active: activeSnap.docs.map((d) => ({ id: d.id, ...d.data() })), upcoming: upcomingSnap.docs.map((d) => ({ id: d.id, ...d.data() })), expired: expiredSnap.docs.map((d) => ({ id: d.id, ...d.data() })) }, HttpStatus.OK);
             } catch (err: any) {
                 console.error("getSellerOffers error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: err.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

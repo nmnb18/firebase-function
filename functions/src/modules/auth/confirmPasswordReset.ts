@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import cors from "cors";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -7,21 +8,19 @@ export const confirmPasswordResetHandler = (req: Request, res: Response): void =
     corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
-                    return res.status(405).json({ error: "Only POST allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const { oobCode, newPassword } = req.body;
 
                 if (!oobCode || !newPassword) {
-                    return res.status(400).json({
-                        error: "oobCode and newPassword are required"
-                    });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "oobCode and newPassword are required", HttpStatus.BAD_REQUEST);
                 }
 
                 const FIREBASE_API_KEY = process.env.API_KEY;
 
                 if (!FIREBASE_API_KEY) {
-                    return res.status(500).json({ error: "Missing API Key in env" });
+                    return sendError(res, ErrorCodes.INTERNAL_ERROR, "Missing API Key in env", HttpStatus.INTERNAL_SERVER_ERROR);
                 }
 
                 // 🔥 Call Firebase REST API to verify + update password
@@ -43,27 +42,21 @@ export const confirmPasswordResetHandler = (req: Request, res: Response): void =
                     const message = data.error.message;
 
                     if (message === "INVALID_OOB_CODE") {
-                        return res.status(400).json({ error: "Invalid or expired reset link" });
+                        return sendError(res, ErrorCodes.INVALID_OTP, "Invalid or expired reset link", HttpStatus.BAD_REQUEST);
                     }
 
                     if (message === "EXPIRED_OOB_CODE") {
-                        return res.status(400).json({ error: "Reset link has expired" });
+                        return sendError(res, ErrorCodes.TOKEN_EXPIRED, "Reset link has expired", HttpStatus.BAD_REQUEST);
                     }
 
-                    return res.status(500).json({ error: message });
+                    return sendError(res, ErrorCodes.INTERNAL_ERROR, message, HttpStatus.INTERNAL_SERVER_ERROR);
                 }
 
-                return res.status(200).json({
-                    success: true,
-                    message: "Password reset successful",
-                    email: data.email
-                });
+                return sendSuccess(res, { message: "Password reset successful", email: data.email }, HttpStatus.OK);
 
             } catch (err: any) {
                 console.error("confirmPasswordReset Error:", err);
-                return res.status(err.statusCode ?? 500).json({
-                    error: "Failed to reset password"
-                });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to reset password", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

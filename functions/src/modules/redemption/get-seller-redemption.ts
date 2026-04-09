@@ -3,13 +3,14 @@ import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import cors from "cors";
 import { createCache } from "../../utils/cache";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 const cache = createCache();
 export const getSellerRedemptionsHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             if (req.method !== "GET") {
-                return res.status(405).json({ error: "Method not allowed" });
+                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
             }
 
             try {
@@ -51,10 +52,16 @@ export const getSellerRedemptionsHandler = (req: Request, res: Response): void =
                     },
                 };
                 //cache.set(cacheKey, responseData, 30000);
-                return res.status(200).json(responseData);
+                return sendSuccess(res, {
+                    redemptions,
+                    stats: {
+                        pending: pendingCountSnap.data().count,
+                        total: totalCountSnap.data().count,
+                    }
+                }, HttpStatus.OK);
             } catch (err: any) {
                 console.error("getSellerRedemptions error:", err);
-                return res.status(err.statusCode ?? 500).json({ error: err.message });
+                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

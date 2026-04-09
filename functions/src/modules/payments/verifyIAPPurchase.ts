@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
+import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
 const corsHandler = cors({ origin: true });
 
@@ -42,27 +43,25 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
         corsHandler(req, res, async () => {
             try {
                 if (req.method !== "POST") {
-                    return res.status(405).json({ error: "Only POST allowed" });
+                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
                 }
 
                 const currentUser = await authenticateUser(
                     req.headers.authorization
                 );
                 if (!currentUser?.uid) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
                 }
 
                 const { purchaseToken, productId, transactionId } = req.body;
 
                 if (!purchaseToken || !productId || !transactionId) {
-                    return res.status(400).json({
-                        error: "Missing purchaseToken, productId, or transactionId",
-                    });
+                    return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing purchaseToken, productId, or transactionId", HttpStatus.BAD_REQUEST);
                 }
 
                 const plan = PLAN_CONFIG[productId as keyof typeof PLAN_CONFIG];
                 if (!plan) {
-                    return res.status(400).json({ error: "Invalid plan" });
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid plan", HttpStatus.BAD_REQUEST);
                 }
 
                 // 🔓 Decode Apple payload
@@ -105,16 +104,19 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                     .get();
 
                 if (!existing.empty) {
-                    return res.status(200).json({
-                        success: true,
+                    return sendSuccess(res, {
                         message: "Subscription already processed",
-                    });
+                    }, HttpStatus.OK);
                 }
 
                 /**
-                 * 1️⃣ Update seller_profiles (same as Razorpay)
+                 * ATOMIC BATCH WRITE: seller profile + subscription + history
                  */
-                await db.collection("seller_profiles").doc(sellerId).update({
+                const batch = db.batch();
+
+                // 1️⃣ Update seller_profiles
+                const sellerRef = db.collection("seller_profiles").doc(sellerId);
+                batch.update(sellerRef, {
                     subscription: {
                         tier: plan.name,
                         expires_at: adminRef.firestore.Timestamp.fromDate(
@@ -135,10 +137,10 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                     },
                 });
 
-                /**
-                 * 2️⃣ Update seller_subscriptions (mirror Razorpay)
-                 */
-                await db.collection("seller_subscriptions").doc(sellerId).set(
+                // 2️⃣ Update seller_subscriptions
+                const subscriptionRef = db.collection("seller_subscriptions").doc(sellerId);
+                batch.set(
+                    subscriptionRef,
                     {
                         tier: plan.name,
                         status: "active",
@@ -156,10 +158,9 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                     { merge: true }
                 );
 
-                /**
-                 * 3️⃣ Insert subscription_history record
-                 */
-                await historyRef.add({
+                // 3️⃣ Insert subscription_history record
+                const historyRecordRef = historyRef.doc();
+                batch.set(historyRecordRef, {
                     store: "apple",
                     product_id: productId,
                     transaction_id: transactionId,
@@ -176,8 +177,10 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                         adminRef.firestore.Timestamp.fromDate(expiresAt),
                 });
 
-                return res.status(200).json({
-                    success: true,
+                // Commit all writes atomically
+                await batch.commit();
+
+                return sendSuccess(res, {
                     message: "Apple subscription verified",
                     subscription: {
                         order_id: transactionId,
@@ -185,13 +188,10 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                         expires_at: expiresAt.toISOString(),
                         monthly_qr_limit: plan.monthly_qr_limit,
                     },
-                });
+                }, HttpStatus.OK);
             } catch (error: any) {
                 console.error("verifyIAPPurchase error:", error);
-                return res.status(error.statusCode ?? 500).json({
-                    success: false,
-                    error: error.message || "Verification failed",
-                });
+                return sendError(res, ErrorCodes.PAYMENT_VERIFICATION_FAILED, error.message || "Verification failed", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
             }
         });
 };

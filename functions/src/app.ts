@@ -177,6 +177,6 @@ router.post("/markNotificationsRead", markNotificationsReadHandler);
 // Dashboard
 router.get("/sellerStats", sellerStatsHandler);
 
-app.use("/api", router);
+app.use("/", router);
 
 export { app };

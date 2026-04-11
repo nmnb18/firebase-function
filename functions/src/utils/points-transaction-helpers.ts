@@ -94,8 +94,8 @@ export async function createDailyScanRecord(
     await db.collection("daily_scans").add({
         user_id: userId,
         seller_id: sellerId,
-        scan_date: new Date(),
-        scanned_at: new Date(),
+        scan_date: adminRef.firestore.FieldValue.serverTimestamp(),
+        scanned_at: adminRef.firestore.FieldValue.serverTimestamp(),
         source,
     });
 }
@@ -276,7 +276,7 @@ export async function createPointsEarningTransaction(
     if (data.transactionType === "qr_scan") {
         transactionData.transaction_type = "earn";
         transactionData.qr_type = "user";
-        transactionData.timestamp = new Date();
+        transactionData.timestamp = adminRef.firestore.FieldValue.serverTimestamp();
     }
 
     if (data.razorpayOrderId) {

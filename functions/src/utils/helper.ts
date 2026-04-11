@@ -78,13 +78,11 @@ const sendVerificationEmail = async (email: string, name: string, verificationTo
     );
 
 };
-const generateInternalOrderId = async () => {
-    const paymentsSnap = await db.collection("payments").get();
-    const count = paymentsSnap.size + 1;
-
-    // Always 3 digits: 001, 002, 003...
-    const padded = String(count).padStart(3, "0");
-    return `GBT-${padded}`;
+const generateInternalOrderId = (): string => {
+    // Use timestamp + random suffix — avoids full collection scan and is collision-resistant
+    const ts = Date.now().toString(36).toUpperCase();
+    const rand = Math.floor(Math.random() * 0xfff).toString(16).toUpperCase().padStart(3, "0");
+    return `GBT-${ts}-${rand}`;
 }
 
 const generateRedeemCode = () => {

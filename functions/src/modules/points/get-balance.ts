@@ -58,11 +58,10 @@ export const getPointsBalanceHandler = async (req: Request, res: Response, next:
                     }
                 });
 
-                // Get all seller profiles in parallel
+                // Get all seller profiles in a single batched read (replaces N+1 individual gets)
                 const sellerIds = pointsSnapshot.docs.map(doc => doc.data().seller_id);
-                const sellerDocs = await Promise.all(
-                    sellerIds.map(id => db.collection("seller_profiles").doc(id).get())
-                );
+                const sellerRefs = sellerIds.map(id => db.collection("seller_profiles").doc(id));
+                const sellerDocs = sellerRefs.length > 0 ? await db.getAll(...sellerRefs) : [];
 
                 // Create seller lookup map
                 const sellerMap = new Map();

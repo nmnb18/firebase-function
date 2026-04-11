@@ -68,7 +68,7 @@ export const verifyPaymentHandler = async (req: Request, res: Response, next: Ne
                     now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000
                 );
 
-                const internalOrderId = await generateInternalOrderId();
+                const internalOrderId = generateInternalOrderId();
 
                 // ATOMIC BATCH WRITE: payment + coupon usage + seller profile + subscription + history
                 const batch = db.batch();

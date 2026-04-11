@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { db } from "../../config/firebase";
+import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
@@ -35,8 +35,8 @@ export const registerPushTokenHandler = async (req: Request, res: Response, next
                     platform,
                     device_name,
                     device_model,
-                    created_at: new Date(),
-                    updated_at: new Date(),
+                    created_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 });
 
                 return sendSuccess(res, { message: "Push token registered" }, HttpStatus.OK);

@@ -1,23 +1,15 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { auth, db, adminRef } from "../../config/firebase";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const phoneLoginHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            const { firebaseIdToken, latitude, longitude } = req.body;
+export const phoneLoginHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { firebaseIdToken, latitude, longitude } = req.body;
 
             if (!firebaseIdToken) {
                 return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing Firebase token", HttpStatus.BAD_REQUEST);
             }
 
-            try {
+    try {
                 // ---------------------------------------------
                 // 1️⃣ VERIFY FIREBASE TOKEN
                 // ---------------------------------------------
@@ -120,9 +112,7 @@ export const phoneLoginHandler = (req: Request, res: Response): void => {
                 // ---------------------------------------------
                 return sendSuccess(res, { message: "Phone login successful" }, HttpStatus.OK);
 
-            } catch (error) {
-                console.error("phoneLogin error:", error);
-                return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid Firebase token", HttpStatus.UNAUTHORIZED);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

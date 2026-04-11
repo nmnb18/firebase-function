@@ -1,5 +1,4 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
@@ -15,30 +14,8 @@ import {
 } from "../../utils/points-transaction-helpers";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-/**
- * POST /confirmUPIPaymentAndAwardPoints
- *
- * Called by the user app after the Razorpay SDK completes payment.
- * Verifies the HMAC-SHA256 signature, then atomically:
- *   1. Marks the upi_payment_order as "completed"
- *   2. Creates a transaction record
- *   3. Increments customer loyalty points
- *   4. Updates seller stats
- *
- * Idempotent: returns 409 if the order is already processed.
- *
- * Body: { razorpay_payment_id, razorpay_order_id, razorpay_signature, seller_id }
- * Auth: Firebase JWT required (user token)
- */
-export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        if (req.method !== "POST") {
-            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
-        }
-
-        try {
+export const confirmUPIPaymentAndAwardPointsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser?.uid) {
                 return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
@@ -154,9 +131,7 @@ export const confirmUPIPaymentAndAwardPointsHandler = (req: Request, res: Respon
                 seller_name: sellerName,
                 payment_id: razorpay_payment_id,
             }, HttpStatus.OK);
-        } catch (error: any) {
-            console.error("confirmUPIPaymentAndAwardPoints error:", error);
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    });
+    } catch (err) {
+        next(err);
+    }
 };

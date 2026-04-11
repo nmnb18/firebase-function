@@ -1,6 +1,5 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser, handleAuthError } from "../../middleware/auth";
 import { getCurrentMonthScanCount } from "../../utils/helper";
 import { calculateRewardPoints } from "../../utils/calculate-reward-points";
@@ -15,15 +14,11 @@ import {
 } from "../../utils/points-transaction-helpers";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
 /** ----------------------------------------------------
  * SECURE QR SCAN BY SELLER
  * ---------------------------------------------------- */
-export const scanUserQRCodeHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "POST") return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
+export const scanUserQRCodeHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 // ----------------------------------
                 // AUTH: Seller
@@ -157,10 +152,8 @@ export const scanUserQRCodeHandler = (req: Request, res: Response): void => {
                     seller_name: seller?.business?.shop_name,
                     customer_name: customerName,
                 }, HttpStatus.OK);
-            } catch (err: any) {
-                if (err.name === "AuthError") return handleAuthError(err, res);
-                console.error("Scan User QR Error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message || "Internal server error", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err: any) {
+        if (err.name === "AuthError") return handleAuthError(err, res);
+        next(err);
+    }
 };

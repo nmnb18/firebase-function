@@ -1,21 +1,14 @@
 // firebase-functions/src/points/getBalance.ts
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
 
-export const getPointsBalanceHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "GET") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            try {
+export const getPointsBalanceHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 // Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
 
@@ -65,11 +58,10 @@ export const getPointsBalanceHandler = (req: Request, res: Response): void => {
                     }
                 });
 
-                // Get all seller profiles in parallel
+                // Get all seller profiles in a single batched read (replaces N+1 individual gets)
                 const sellerIds = pointsSnapshot.docs.map(doc => doc.data().seller_id);
-                const sellerDocs = await Promise.all(
-                    sellerIds.map(id => db.collection("seller_profiles").doc(id).get())
-                );
+                const sellerRefs = sellerIds.map(id => db.collection("seller_profiles").doc(id));
+                const sellerDocs = sellerRefs.length > 0 ? await db.getAll(...sellerRefs) : [];
 
                 // Create seller lookup map
                 const sellerMap = new Map();
@@ -131,11 +123,9 @@ export const getPointsBalanceHandler = (req: Request, res: Response): void => {
 
                 return sendSuccess(res, responseData, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("Get balance error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 
 // Helper function to generate reward description

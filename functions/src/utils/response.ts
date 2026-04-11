@@ -31,8 +31,8 @@ export const sendSuccess = <T = any>(
   res: Response,
   data: T,
   statusCode: number = 200
-): Response<SuccessResponse<T>> => {
-  return res.status(statusCode).json({
+): void => {
+  res.status(statusCode).json({
     success: true,
     data,
   });
@@ -50,8 +50,8 @@ export const sendError = (
   code: string,
   message: string,
   statusCode: number = 400
-): Response<ErrorResponse> => {
-  return res.status(statusCode).json({
+): void => {
+  res.status(statusCode).json({
     success: false,
     error: {
       code,
@@ -125,5 +125,6 @@ export const HttpStatus = {
   UNPROCESSABLE_ENTITY: 422,
   TOO_MANY_REQUESTS: 429,
   INTERNAL_SERVER_ERROR: 500,
+  BAD_GATEWAY: 502,
   SERVICE_UNAVAILABLE: 503,
 } as const;

@@ -1,21 +1,12 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import Razorpay from "razorpay";
-import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { PLAN_CONFIG } from "../../utils/constant";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-
-export const createOrderHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            try {
+export const createOrderHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const { planId, sellerId, couponCode } = req.body;
 
                 // Authenticate
@@ -109,11 +100,9 @@ export const createOrderHandler = (req: Request, res: Response): void => {
                     finalAmount: finalAmount,
                     originalAmount: plan.price,
                 }, HttpStatus.OK);
-            } catch (error: any) {
-                console.error("Razorpay order creation error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to create Razorpay order", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 
 // Helper function to validate and apply coupon

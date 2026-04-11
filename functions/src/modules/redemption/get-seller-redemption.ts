@@ -1,19 +1,13 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
-export const getSellerRedemptionsHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "GET") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
 
-            try {
+export const getSellerRedemptionsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const sellerUser = await authenticateUser(req.headers.authorization);
 
                 // Get query parameters
@@ -59,9 +53,7 @@ export const getSellerRedemptionsHandler = (req: Request, res: Response): void =
                         total: totalCountSnap.data().count,
                     }
                 }, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("getSellerRedemptions error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

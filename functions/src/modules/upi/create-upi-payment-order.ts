@@ -1,28 +1,11 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import Razorpay from "razorpay";
-import cors from "cors";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-/**
- * POST /createUPIPaymentOrder
- *
- * Creates a Razorpay order and persists a pending record in Firestore.
- * The client uses the returned order_id + key_id to launch the Razorpay SDK.
- *
- * Body: { seller_id: string, amount: number }   ← amount in paise (integer)
- * Auth: Firebase JWT required (user token)
- */
-export const createUPIPaymentOrderHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        if (req.method !== "POST") {
-            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
-        }
-
-        try {
+export const createUPIPaymentOrderHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser?.uid) {
                 return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
@@ -81,9 +64,7 @@ export const createUPIPaymentOrderHandler = (req: Request, res: Response): void 
                 currency: order.currency,
                 seller_name: sellerData.business?.shop_name || "",
             }, HttpStatus.OK);
-        } catch (error: any) {
-            console.error("createUPIPaymentOrder error:", error);
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    });
+    } catch (err) {
+        next(err);
+    }
 };

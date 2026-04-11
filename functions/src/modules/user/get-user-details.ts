@@ -1,24 +1,16 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
 
-export const getUserDetailsHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-
-            if (req.method !== "GET") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET method only", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            const uid = req.query.uid as string;
+export const getUserDetailsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const uid = req.query.uid as string;
             if (!uid) return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "UID required", HttpStatus.BAD_REQUEST);
 
-            try {
+    try {
                 // AUTHENTICATE REQUEST
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
@@ -70,9 +62,7 @@ export const getUserDetailsHandler = (req: Request, res: Response): void => {
                     }
                 }, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("getUserDetails error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

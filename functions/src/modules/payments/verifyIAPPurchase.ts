@@ -1,10 +1,7 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
-
-const corsHandler = cors({ origin: true });
 
 const PLAN_CONFIG = {
     seller_pro_30d: {
@@ -39,12 +36,8 @@ function decodeApplePurchaseToken(jws: string) {
     );
 }
 
-export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "POST") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const verifyIAPPurchaseHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const currentUser = await authenticateUser(
                     req.headers.authorization
@@ -189,9 +182,7 @@ export const verifyIAPPurchaseHandler = (req: Request, res: Response): void => {
                         monthly_qr_limit: plan.monthly_qr_limit,
                     },
                 }, HttpStatus.OK);
-            } catch (error: any) {
-                console.error("verifyIAPPurchase error:", error);
-                return sendError(res, ErrorCodes.PAYMENT_VERIFICATION_FAILED, error.message || "Verification failed", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

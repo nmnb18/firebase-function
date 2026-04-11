@@ -1,21 +1,14 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { PLAN_CONFIG } from "../../utils/constant";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
 // In-memory cache for coupon validation (keyed by code+planId+sellerId, 60s)
 const couponCache: { [key: string]: { data: any, expires: number } } = {};
-export const applyCouponHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
 
-            try {
+export const applyCouponHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 // Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
@@ -112,9 +105,7 @@ export const applyCouponHandler = (req: Request, res: Response): void => {
                     message: `Coupon applied successfully! ₹${Math.round(discountAmount)} discount`
                 }, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("Apply coupon error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to apply coupon", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

@@ -1,16 +1,9 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { auth } from "../../config/firebase";
-import cors from "cors";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const changePasswordHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "POST") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const changePasswordHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const { newPassword } = req.body;
                 const authHeader = req.headers.authorization;
@@ -32,9 +25,7 @@ export const changePasswordHandler = (req: Request, res: Response): void => {
 
                 return sendSuccess(res, { message: "Password updated successfully" }, HttpStatus.OK);
 
-            } catch (err: any) {
-                console.error("changePassword error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to update password", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

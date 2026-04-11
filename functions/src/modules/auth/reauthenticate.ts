@@ -1,16 +1,9 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { auth } from "../../config/firebase";
-import cors from "cors";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const reauthenticateHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "POST") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const reauthenticateHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const { currentPassword } = req.body;
                 const authHeader = req.headers.authorization;
@@ -55,9 +48,7 @@ export const reauthenticateHandler = (req: Request, res: Response): void => {
 
                 return sendSuccess(res, { message: "Authenticated successfully" }, HttpStatus.OK);
 
-            } catch (err: any) {
-                console.error("reauthenticate error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Reauth failed", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

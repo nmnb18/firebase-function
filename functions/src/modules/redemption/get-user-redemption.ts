@@ -1,20 +1,14 @@
 // firebase-functions/src/redemption/getUserRedemptions.ts
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
-export const getUserRedemptionsHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "GET") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
 
-            try {
+export const getUserRedemptionsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const currentUser = await authenticateUser(req.headers.authorization);
                 // Get query parameters
                 const { seller_id } = req.query;
@@ -71,15 +65,10 @@ export const getUserRedemptionsHandler = (req: Request, res: Response): void => 
                 //cache.set(cacheKey, responseData, 30000);
                 return sendSuccess(res, { redemptions, count: redemptions.length, stats }, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("Get user redemptions error:", error);
-
-                // Handle specific Firestore errors
-                if (error.code === 9) { // FAILED_PRECONDITION error
-                    return sendError(res, ErrorCodes.INTERNAL_ERROR, "Database query requires index. Please contact support.", HttpStatus.BAD_REQUEST);
-                }
-
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Failed to fetch redemptions", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (error: any) {
+        if (error.code === 9) { // FAILED_PRECONDITION error
+            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Database query requires index. Please contact support.", HttpStatus.BAD_REQUEST);
+        }
+        next(error);
+    }
 };

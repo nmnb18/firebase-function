@@ -1,20 +1,12 @@
 // firebase-functions/src/redemption/getRedemptionQR.ts
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { generateQRBase64 } from "../../utils/qr-helper";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const getRedemptionQRHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        if (req.method !== "GET") {
-            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-        }
-
-        try {
+export const getRedemptionQRHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
             const currentUser = await authenticateUser(req.headers.authorization);
 
             const { redemption_id } = req.query;
@@ -52,9 +44,7 @@ export const getRedemptionQRHandler = (req: Request, res: Response): void => {
                 points: redemptionData.points
             }, HttpStatus.OK);
 
-        } catch (error: any) {
-            console.error("Get redemption QR error:", error);
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    });
+    } catch (err) {
+        next(err);
+    }
 };

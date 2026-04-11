@@ -1,14 +1,10 @@
-import { Request, Response } from "express";
-import cors from "cors";
-import { db } from "../../config/firebase";
+import { Request, Response, NextFunction } from "express";
+import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const registerPushTokenHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
+export const registerPushTokenHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const user = await authenticateUser(req.headers.authorization); // gives user.uid
 
                 const {
@@ -39,14 +35,12 @@ export const registerPushTokenHandler = (req: Request, res: Response): void => {
                     platform,
                     device_name,
                     device_model,
-                    created_at: new Date(),
-                    updated_at: new Date(),
+                    created_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                    updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 });
 
                 return sendSuccess(res, { message: "Push token registered" }, HttpStatus.OK);
-            } catch (err) {
-                console.error(err);
-                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

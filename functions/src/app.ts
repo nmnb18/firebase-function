@@ -1,6 +1,67 @@
 import express from "express";
 import cors from "cors";
 
+// Middleware
+import { correlationMiddleware } from "./middleware/correlation";
+import { sanitizePIIMiddleware } from "./middleware/sanitize-pii";
+import { errorHandlerMiddleware } from "./middleware/error-handler";
+import { validateBody, validateQuery } from "./middleware/validate";
+import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit, clientLogRateLimit } from "./middleware/rate-limit";
+
+// Validation schemas
+import {
+    loginSchema,
+    registerUserSchema,
+    registerSellerSchema,
+    phoneLoginSchema,
+    refreshTokenSchema,
+    changePasswordSchema,
+    requestPasswordResetSchema,
+    confirmPasswordResetSchema,
+    reauthenticateSchema,
+    validateCitySchema,
+} from "./validation/auth.schemas";
+import {
+    updateUserProfileSchema,
+    assignTodayOfferSchema,
+    redeemTodayOfferSchema,
+} from "./validation/user.schemas";
+import {
+    updateSellerProfileSchema,
+    updateSellerMediaSchema,
+    saveSellerOfferSchema,
+} from "./validation/seller.schemas";
+import {
+    createRedemptionSchema,
+    processRedemptionSchema,
+    cancelRedemptionSchema,
+    markRedemptionAsExpiredSchema,
+    verifyRedeemCodeSchema,
+} from "./validation/redemption.schemas";
+import {
+    createOrderSchema,
+    verifyPaymentSchema,
+    applyCouponSchema,
+    verifyIAPPurchaseSchema,
+} from "./validation/payments.schemas";
+import {
+    createUPIPaymentOrderSchema,
+    confirmUPIPaymentSchema,
+    scanUserQRCodeSchema,
+} from "./validation/upi.schemas";
+import {
+    registerPushTokenSchema,
+    unregisterPushTokenSchema,
+    markNotificationsReadSchema,
+} from "./validation/push.schemas";
+import { clientLogBatchSchema } from "./validation/client-log.schemas";
+
+// Logging
+import { clientLogHandler } from "./modules/logging/client-log";
+
+// Dashboard
+import { errorDashboardHandler } from "./modules/dashboard/error-dashboard";
+
 // Auth
 import { changePasswordHandler } from "./modules/auth/changePassword";
 import { confirmPasswordResetHandler } from "./modules/auth/confirmPasswordReset";
@@ -91,43 +152,47 @@ app.use(express.json({
     verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
 
+// ── Observability middleware (runs before every route) ─────────────────────
+app.use(correlationMiddleware);
+app.use(sanitizePIIMiddleware);
+
 const router = express.Router();
 
 // Warmup
 router.get("/warmup", (_req, res) => res.status(200).json({ status: "warm" }));
 
 // Auth
-router.post("/loginUser", loginUserHandler);
-router.post("/loginSeller", loginSellerHandler);
-router.post("/registerUser", registerUserHandler);
-router.post("/registerSeller", registerSellerHandler);
-router.post("/phoneLogin", phoneLoginHandler);
+router.post("/loginUser", loginRateLimit, validateBody(loginSchema), loginUserHandler);
+router.post("/loginSeller", loginRateLimit, validateBody(loginSchema), loginSellerHandler);
+router.post("/registerUser", validateBody(registerUserSchema), registerUserHandler);
+router.post("/registerSeller", validateBody(registerSellerSchema), registerSellerHandler);
+router.post("/phoneLogin", validateBody(phoneLoginSchema), phoneLoginHandler);
 router.post("/logout", logoutHandler);
-router.post("/refreshToken", refreshTokenHandler);
-router.post("/changePassword", changePasswordHandler);
-router.post("/requestPasswordReset", requestPasswordResetHandler);
-router.post("/confirmPasswordReset", confirmPasswordResetHandler);
-router.post("/reauthenticate", reauthenticateHandler);
+router.post("/refreshToken", validateBody(refreshTokenSchema), refreshTokenHandler);
+router.post("/changePassword", validateBody(changePasswordSchema), changePasswordHandler);
+router.post("/requestPasswordReset", validateBody(requestPasswordResetSchema), requestPasswordResetHandler);
+router.post("/confirmPasswordReset", validateBody(confirmPasswordResetSchema), confirmPasswordResetHandler);
+router.post("/reauthenticate", validateBody(reauthenticateSchema), reauthenticateHandler);
 router.delete("/deleteUser", deleteUserHandler);
 router.delete("/deleteSellerAccount", deleteSellerAccountHandler);
 router.get("/verifyEmail", verifyEmailHandler);
-router.post("/validateCity", validateCityHandler);
+router.post("/validateCity", validateBody(validateCitySchema), validateCityHandler);
 
 // User
 router.get("/getUserDetails", getUserDetailsHandler);
-router.patch("/updateUserProfile", updateUserProfileHandler);
+router.patch("/updateUserProfile", validateBody(updateUserProfileSchema), updateUserProfileHandler);
 router.get("/getUserPerks", getUserPerksHandler);
-router.post("/assignTodayOffer", assignTodayOfferHandler);
+router.post("/assignTodayOffer", validateBody(assignTodayOfferSchema), assignTodayOfferHandler);
 router.get("/getTodayOfferStatus", getTodayOfferStatusHandler);
-router.post("/redeemTodayOffer", redeemTodayOfferHandler);
+router.post("/redeemTodayOffer", validateBody(redeemTodayOfferSchema), redeemTodayOfferHandler);
 
 // Seller
 router.get("/getSellerDetails", getSellerDetailsHandler);
-router.patch("/updateSellerProfile", updateSellerProfileHandler);
-router.post("/updateSellerMedia", updateSellerMediaHandler);
+router.patch("/updateSellerProfile", validateBody(updateSellerProfileSchema), updateSellerProfileHandler);
+router.post("/updateSellerMedia", validateBody(updateSellerMediaSchema), updateSellerMediaHandler);
 router.get("/getNearbySellers", getNearbySellersHandler);
 router.get("/getSellerOffers", getSellerOffersHandler);
-router.post("/saveSellerOffer", saveSellerOfferHandler);
+router.post("/saveSellerOffer", validateBody(saveSellerOfferSchema), saveSellerOfferHandler);
 router.delete("/deleteSellerOffer", deleteSellerOfferHandler);
 router.get("/getSellerOfferById", getSellerOfferByIdHandler);
 router.get("/getSubscriptionHistory", getSubscriptionHistoryHandler);
@@ -140,43 +205,51 @@ router.get("/getBalanceBySeller", getBalanceBySellerHandler);
 router.get("/getTransactions", getTransactionsHandler);
 
 // Redemption
-router.post("/createRedemption", createRedemptionHandler);
+router.post("/createRedemption", validateBody(createRedemptionSchema), createRedemptionHandler);
 router.get("/getUserRedemptions", getUserRedemptionsHandler);
 router.get("/getSellerRedemptions", getSellerRedemptionsHandler);
-router.post("/processRedemption", processRedemptionHandler);
-router.post("/cancelRedemption", cancelRedemptionHandler);
+router.post("/processRedemption", validateBody(processRedemptionSchema), processRedemptionHandler);
+router.post("/cancelRedemption", validateBody(cancelRedemptionSchema), cancelRedemptionHandler);
 router.get("/getRedemptionQR", getRedemptionQRHandler);
 router.get("/getRedemptionStatus", getRedemptionStatusHandler);
-router.post("/markRedemptionAsExpired", markRedemptionAsExpiredHandler);
+router.post("/markRedemptionAsExpired", validateBody(markRedemptionAsExpiredSchema), markRedemptionAsExpiredHandler);
 router.get("/redemptionAnalytics", redemptionAnalyticsHandler);
-router.post("/verifyRedeemCode", verifyRedeemCodeHandler);
+router.post("/verifyRedeemCode", validateBody(verifyRedeemCodeSchema), verifyRedeemCodeHandler);
 
 // QR Code
 router.get("/generateUserQR", generateUserQRHandler);
-router.post("/scanUserQRCode", scanUserQRCodeHandler);
+router.post("/scanUserQRCode", qrScanRateLimit, validateBody(scanUserQRCodeSchema), scanUserQRCodeHandler);
 
 // Payments
-router.post("/applyCoupon", applyCouponHandler);
-router.post("/createOrder", createOrderHandler);
-router.post("/verifyPayment", verifyPaymentHandler);
-router.post("/verifyIAPPurchase", verifyIAPPurchaseHandler);
+router.post("/applyCoupon", validateBody(applyCouponSchema), applyCouponHandler);
+router.post("/createOrder", validateBody(createOrderSchema), createOrderHandler);
+router.post("/verifyPayment", validateBody(verifyPaymentSchema), verifyPaymentHandler);
+router.post("/verifyIAPPurchase", validateBody(verifyIAPPurchaseSchema), verifyIAPPurchaseHandler);
 
 // UPI
 router.get("/getSellerByVPA", getSellerByVPAHandler);
-router.post("/createUPIPaymentOrder", createUPIPaymentOrderHandler);
-router.post("/confirmUPIPaymentAndAwardPoints", confirmUPIPaymentAndAwardPointsHandler);
+router.post("/createUPIPaymentOrder", upiOrderRateLimit, validateBody(createUPIPaymentOrderSchema), createUPIPaymentOrderHandler);
+router.post("/confirmUPIPaymentAndAwardPoints", validateBody(confirmUPIPaymentSchema), confirmUPIPaymentAndAwardPointsHandler);
+// razorpayWebhook: no body validation — Razorpay sends its own payload format; auth is HMAC-SHA256 signature
 router.post("/razorpayWebhook", razorpayWebhookHandler);
 
 // Push Notifications
-router.post("/registerPushToken", registerPushTokenHandler);
-router.post("/unregisterPushToken", unregisterPushTokenHandler);
+router.post("/registerPushToken", validateBody(registerPushTokenSchema), registerPushTokenHandler);
+router.post("/unregisterPushToken", validateBody(unregisterPushTokenSchema), unregisterPushTokenHandler);
 router.get("/getNotifications", getNotificationsHandler);
 router.get("/getUnreadNotificationCount", getUnreadNotificationCountHandler);
-router.post("/markNotificationsRead", markNotificationsReadHandler);
+router.post("/markNotificationsRead", validateBody(markNotificationsReadSchema), markNotificationsReadHandler);
+
+// Client Logging (FE crash / network error ingest)
+router.post("/clientLog", clientLogRateLimit, validateBody(clientLogBatchSchema), clientLogHandler);
 
 // Dashboard
 router.get("/sellerStats", sellerStatsHandler);
+router.get("/admin/errorDashboard", errorDashboardHandler);
 
 app.use("/", router);
+
+// ── Centralized error handler (MUST be last) ───────────────────────────────
+app.use(errorHandlerMiddleware);
 
 export { app };

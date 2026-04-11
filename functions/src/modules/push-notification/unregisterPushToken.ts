@@ -1,14 +1,10 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const unregisterPushTokenHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
+export const unregisterPushTokenHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const user = await authenticateUser(req.headers.authorization);
                 const { push_token } = req.body;
 
@@ -27,8 +23,7 @@ export const unregisterPushTokenHandler = (req: Request, res: Response): void =>
                 await batch.commit();
 
                 return sendSuccess(res, { message: "Push token unregistered" }, HttpStatus.OK);
-            } catch (err) {
-                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

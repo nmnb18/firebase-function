@@ -1,19 +1,12 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser, handleAuthError } from "../../middleware/auth";
-import cors from "cors";
 import crypto from "crypto";
 import { generateQRBase64 } from "../../utils/qr-helper";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const generateUserQRHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const generateUserQRHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const currentUser = await authenticateUser(
                     req.headers.authorization
@@ -72,13 +65,8 @@ export const generateUserQRHandler = (req: Request, res: Response): void => {
                 await qrRef.set(qrDoc);
 
                 return sendSuccess(res, qrDoc, HttpStatus.OK);
-            } catch (error: any) {
-                if (error.name === "AuthError") {
-                    return handleAuthError(error, res);
-                }
-
-                console.error("Generate User QR Error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Internal server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (error: any) {
+        if (error.name === "AuthError") return handleAuthError(error, res);
+        next(error);
+    }
 };

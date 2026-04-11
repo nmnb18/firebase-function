@@ -1,13 +1,9 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const validateCityHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-            try {
+export const validateCityHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const { city } = req.body;
 
                 if (!city) {
@@ -46,9 +42,7 @@ export const validateCityHandler = (req: Request, res: Response): void => {
                 );
 
                 return sendSuccess(res, { status: "COMING_SOON", city: cityKey }, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("validateCity error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to validate city", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

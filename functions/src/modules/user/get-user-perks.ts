@@ -1,19 +1,13 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
 
-export const getUserPerksHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const getUserPerksHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 // 🔐 AUTH
                 const currentUser = await authenticateUser(req.headers.authorization);
@@ -110,9 +104,7 @@ export const getUserPerksHandler = (req: Request, res: Response): void => {
 
                 return sendSuccess(res, { count: perks.length, perks }, HttpStatus.OK);
 
-            } catch (err: any) {
-                console.error("getUserPerks error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

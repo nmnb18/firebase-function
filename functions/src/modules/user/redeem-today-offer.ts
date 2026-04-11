@@ -1,17 +1,11 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { generateRedeemCode } from "../../utils/helper";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-export const redeemTodayOfferHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "POST") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const redeemTodayOfferHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 // 🔐 USER AUTH
                 const currentUser = await authenticateUser(req.headers.authorization);
@@ -91,9 +85,7 @@ export const redeemTodayOfferHandler = (req: Request, res: Response): void => {
                 });
 
                 return sendSuccess(res, responsePayload, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("generateRedeemCode error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, HttpStatus.BAD_REQUEST);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

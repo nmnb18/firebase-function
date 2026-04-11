@@ -1,12 +1,9 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, auth, db } from "../../config/firebase";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const verifyEmailHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
+export const verifyEmailHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
             const { token } = req.query;
 
             if (!token) {
@@ -43,5 +40,7 @@ export const verifyEmailHandler = (req: Request, res: Response): void => {
             });
 
             return sendSuccess(res, { message: "Email verified successfully" }, HttpStatus.OK);
-        });
+    } catch (err) {
+        next(err);
+    }
 };

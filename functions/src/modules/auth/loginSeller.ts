@@ -1,9 +1,6 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { auth, db } from "../../config/firebase";
-import cors from "cors";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
-
-const corsHandler = cors({ origin: true });
 
 interface LoginUserData {
   email: string;
@@ -19,19 +16,14 @@ interface FirebaseAuthResponse {
   expiresIn: string;
 }
 
-export const loginSellerHandler = (req: Request, res: Response): void => {
-  corsHandler(req, res, async () => {
-      if (req.method !== "POST") {
-        return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-      }
-
-      const { email, password, role } = req.body as LoginUserData;
+export const loginSellerHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const { email, password, role } = req.body as LoginUserData;
 
       if (!email || !password || !role) {
         return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Email, password and role are required", HttpStatus.BAD_REQUEST);
       }
 
-      try {
+  try {
         const FIREBASE_API_KEY = process.env.API_KEY;
         if (!FIREBASE_API_KEY) throw new Error("Missing Firebase API Key");
 
@@ -93,9 +85,7 @@ export const loginSellerHandler = (req: Request, res: Response): void => {
           refreshToken: data.refreshToken,
           expiresIn: data.expiresIn,
         }, HttpStatus.OK);
-      } catch (err: any) {
-        console.error("loginSeller error:", err);
-        return sendError(res, ErrorCodes.INTERNAL_ERROR, "Login failed. Try again later.", HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-    });
+  } catch (err) {
+    next(err);
+  }
 };

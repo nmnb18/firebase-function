@@ -1,8 +1,5 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
-
-const corsHandler = cors({ origin: true });
 
 type AuthResponse = {
     refresh_token: string;
@@ -12,18 +9,13 @@ type AuthResponse = {
     error?: { message: string };
 }
 
-export const refreshTokenHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            const { refreshToken } = req.body;
+export const refreshTokenHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { refreshToken } = req.body;
             if (!refreshToken) {
                 return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "Missing refreshToken", HttpStatus.BAD_REQUEST);
             }
 
-            try {
+    try {
                 const FIREBASE_API_KEY = process.env.API_KEY;
                 // When the Auth emulator is running, FIREBASE_AUTH_EMULATOR_HOST is set
                 // automatically. Route the REST token exchange to the emulator so that
@@ -56,9 +48,7 @@ export const refreshTokenHandler = (req: Request, res: Response): void => {
                     expiresIn: data.expires_in,
                     userId: data.user_id,
                 }, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("Token refresh error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Internal server error", err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

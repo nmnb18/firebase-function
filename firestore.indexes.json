@@ -167,6 +167,38 @@
         { "fieldPath": "user_id", "order": "ASCENDING" },
         { "fieldPath": "seller_id", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "error_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "resolved", "order": "ASCENDING" },
+        { "fieldPath": "last_seen", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "error_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status_code", "order": "ASCENDING" },
+        { "fieldPath": "last_seen", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "error_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "error_code", "order": "ASCENDING" },
+        { "fieldPath": "last_seen", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "error_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "endpoint", "order": "ASCENDING" },
+        { "fieldPath": "last_seen", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -6,6 +6,7 @@ import { correlationMiddleware } from "./middleware/correlation";
 import { sanitizePIIMiddleware } from "./middleware/sanitize-pii";
 import { errorHandlerMiddleware } from "./middleware/error-handler";
 import { validateBody, validateQuery } from "./middleware/validate";
+import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit } from "./middleware/rate-limit";
 
 // Validation schemas
 import {
@@ -157,8 +158,8 @@ const router = express.Router();
 router.get("/warmup", (_req, res) => res.status(200).json({ status: "warm" }));
 
 // Auth
-router.post("/loginUser", validateBody(loginSchema), loginUserHandler);
-router.post("/loginSeller", validateBody(loginSchema), loginSellerHandler);
+router.post("/loginUser", loginRateLimit, validateBody(loginSchema), loginUserHandler);
+router.post("/loginSeller", loginRateLimit, validateBody(loginSchema), loginSellerHandler);
 router.post("/registerUser", validateBody(registerUserSchema), registerUserHandler);
 router.post("/registerSeller", validateBody(registerSellerSchema), registerSellerHandler);
 router.post("/phoneLogin", validateBody(phoneLoginSchema), phoneLoginHandler);
@@ -213,7 +214,7 @@ router.post("/verifyRedeemCode", validateBody(verifyRedeemCodeSchema), verifyRed
 
 // QR Code
 router.get("/generateUserQR", generateUserQRHandler);
-router.post("/scanUserQRCode", validateBody(scanUserQRCodeSchema), scanUserQRCodeHandler);
+router.post("/scanUserQRCode", qrScanRateLimit, validateBody(scanUserQRCodeSchema), scanUserQRCodeHandler);
 
 // Payments
 router.post("/applyCoupon", validateBody(applyCouponSchema), applyCouponHandler);
@@ -223,7 +224,7 @@ router.post("/verifyIAPPurchase", validateBody(verifyIAPPurchaseSchema), verifyI
 
 // UPI
 router.get("/getSellerByVPA", getSellerByVPAHandler);
-router.post("/createUPIPaymentOrder", validateBody(createUPIPaymentOrderSchema), createUPIPaymentOrderHandler);
+router.post("/createUPIPaymentOrder", upiOrderRateLimit, validateBody(createUPIPaymentOrderSchema), createUPIPaymentOrderHandler);
 router.post("/confirmUPIPaymentAndAwardPoints", validateBody(confirmUPIPaymentSchema), confirmUPIPaymentAndAwardPointsHandler);
 // razorpayWebhook: no body validation — Razorpay sends its own payload format; auth is HMAC-SHA256 signature
 router.post("/razorpayWebhook", razorpayWebhookHandler);

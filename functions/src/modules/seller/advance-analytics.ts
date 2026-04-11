@@ -52,97 +52,184 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
                     return sendError(res, ErrorCodes.FORBIDDEN, "Advanced analytics are available only on Pro or Premium plans.", HttpStatus.FORBIDDEN);
                 }
 
-                // Filter all documents by seller_id
-                const txDocs = txSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
-                const redDocs = redSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
-                const pointsDocs = pointsSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
+            const currentUser = await authenticateUser(req.headers.authorization);
+            if (!currentUser || !currentUser.uid) {
+                return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
+            }
 
-                // ----- A: TRENDS 7D / 30D -----
+            // Time windows
+            const now = new Date();
+            const last30 = new Date();
+            last30.setDate(now.getDate() - 30);
+            last30.setHours(0, 0, 0, 0);
 
-                type DayBucket = {
-                    date: string;
-                    scans: number;
-                    unique_users: number;
-                    points_issued: number;
-                    redemptions: number;
-                    points_redeemed: number; // NEW
-                };
+            const last7 = new Date();
+            last7.setDate(now.getDate() - 7);
+            last7.setHours(0, 0, 0, 0);
 
-                const dailyMap30 = new Map<string, DayBucket>();
-                const userSetByDay30 = new Map<string, Set<string>>();
+            // Parallel: Get seller profile + all transactions + all redemptions + filtered points
+            const [profileQuery, txSnapshot, redSnapshot, pointsSnapshot] = await Promise.all([
+                db.collection("seller_profiles")
+                    .where("user_id", "==", currentUser.uid)
+                    .limit(1)
+                    .get(),
+                db.collection("transactions")
+                    .where("transaction_type", "==", "earn")
+                    .where("timestamp", ">=", last30)
+                    .get(),
+                db.collection("redemptions")
+                    .where("created_at", ">=", last30)
+                    .get(),
+                db.collection("points")
+                    .get()  // Still fetch all for dormant segment calculation
+            ]);
 
-                const toDayKey = (d: Date) => d.toISOString().split("T")[0];
+            if (profileQuery.empty) {
+                return sendError(res, ErrorCodes.NOT_FOUND, "Seller profile not found", HttpStatus.NOT_FOUND);
+            }
 
-                // Initialize last 30 days buckets
-                for (let i = 0; i < 30; i++) {
-                    const d = new Date();
-                    d.setDate(now.getDate() - i);
-                    d.setHours(0, 0, 0, 0);
-                    const key = toDayKey(d);
-                    dailyMap30.set(key, {
-                        date: key,
-                        scans: 0,
-                        unique_users: 0,
-                        points_issued: 0,
-                        redemptions: 0,
-                        points_redeemed: 0,
-                    });
-                    userSetByDay30.set(key, new Set<string>());
+            const profileDoc = profileQuery.docs[0];
+            const sellerId = profileDoc.id;
+            const sellerData = profileDoc.data();
+            const tier: "free" | "pro" | "premium" = sellerData?.subscription?.tier || "free";
+
+            // Block free tier
+            if (tier === "free") {
+                return sendError(res, ErrorCodes.FORBIDDEN, "Advanced analytics are available only on Pro or Premium plans.", HttpStatus.FORBIDDEN);
+            }
+
+            // Filter all documents by seller_id
+            const txDocs = txSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
+            const redDocs = redSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
+            const pointsDocs = pointsSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
+
+            // ----- A: TRENDS 7D / 30D -----
+
+            type DayBucket = {
+                date: string;
+                scans: number;
+                unique_users: number;
+                points_issued: number;
+                redemptions: number;
+                points_redeemed: number; // NEW
+            };
+
+            const dailyMap30 = new Map<string, DayBucket>();
+            const userSetByDay30 = new Map<string, Set<string>>();
+
+            const toDayKey = (d: Date) => d.toISOString().split("T")[0];
+
+            // Initialize last 30 days buckets
+            for (let i = 0; i < 30; i++) {
+                const d = new Date();
+                d.setDate(now.getDate() - i);
+                d.setHours(0, 0, 0, 0);
+                const key = toDayKey(d);
+                dailyMap30.set(key, {
+                    date: key,
+                    scans: 0,
+                    unique_users: 0,
+                    points_issued: 0,
+                    redemptions: 0,
+                    points_redeemed: 0,
+                });
+                userSetByDay30.set(key, new Set<string>());
+            }
+
+            // Process earn transactions
+            const qrTypeCounts: Record<string, number> = {};
+            const qrTypePoints: Record<string, number> = {};
+
+            const hourBuckets: number[] = new Array(24).fill(0);
+            const weekdayBuckets: number[] = new Array(7).fill(0);
+
+            type CustomerAgg = {
+                user_id: string;
+                customer_name: string;
+                scans: number;
+                points_earned: number;
+                points_redeemed: number; // NEW
+                redemptions: number; // NEW
+                last_scan: Date | null;
+                last_redemption: Date | null; // NEW
+            };
+
+            const customerAgg = new Map<string, CustomerAgg>();
+
+            // For segments and new vs returning
+            const customerScanCounts30 = new Map<string, number>();
+
+            txDocs.forEach((doc) => {
+                const d = doc.data();
+                const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date(d.timestamp);
+                const key = toDayKey(ts);
+                const userId = d.user_id as string;
+                const customerName = d.customer_name;
+                const pts = Number(d.points || 0);
+                const qrType = d.qr_type || "unknown";
+
+                // Daily 30
+                if (dailyMap30.has(key)) {
+                    const bucket = dailyMap30.get(key)!;
+                    bucket.scans += 1;
+                    bucket.points_issued += pts;
+
+                    const daySet = userSetByDay30.get(key)!;
+                    daySet.add(userId);
                 }
 
-                // Process earn transactions
-                const qrTypeCounts: Record<string, number> = {};
-                const qrTypePoints: Record<string, number> = {};
+                // QR type breakdown
+                qrTypeCounts[qrType] = (qrTypeCounts[qrType] || 0) + 1;
+                qrTypePoints[qrType] = (qrTypePoints[qrType] || 0) + pts;
 
-                const hourBuckets: number[] = new Array(24).fill(0);
-                const weekdayBuckets: number[] = new Array(7).fill(0);
+                // Peak hours/days
+                const hour = ts.getHours();
+                const weekday = ts.getDay();
+                hourBuckets[hour] += 1;
+                weekdayBuckets[weekday] += 1;
 
-                type CustomerAgg = {
-                    user_id: string;
-                    customer_name: string;
-                    scans: number;
-                    points_earned: number;
-                    points_redeemed: number; // NEW
-                    redemptions: number; // NEW
-                    last_scan: Date | null;
-                    last_redemption: Date | null; // NEW
+                // Customer aggregates
+                const prev = customerAgg.get(userId) || {
+                    user_id: userId,
+                    customer_name: customerName,
+                    scans: 0,
+                    points_earned: 0,
+                    points_redeemed: 0,
+                    redemptions: 0,
+                    last_scan: null,
+                    last_redemption: null,
                 };
+                prev.scans += 1;
+                prev.points_earned += pts;
+                if (!prev.last_scan || ts > prev.last_scan) {
+                    prev.last_scan = ts;
+                }
+                customerAgg.set(userId, prev);
 
-                const customerAgg = new Map<string, CustomerAgg>();
+                // New vs returning
+                customerScanCounts30.set(userId, (customerScanCounts30.get(userId) || 0) + 1);
+            });
 
-                // For segments and new vs returning
-                const customerScanCounts30 = new Map<string, number>();
+            // Process redemptions
+            redDocs.forEach((doc) => {
+                const d = doc.data();
+                const ts = d.created_at?.toDate ? d.created_at.toDate() : new Date(d.created_at);
+                const key = toDayKey(ts);
+                const userId = d.user_id as string;
+                const customerName = d.user_name || "Unknown";
+                const points = Number(d.points || 0);
+                const status = d.status;
 
-                txDocs.forEach((doc) => {
-                    const d = doc.data();
-                    const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date(d.timestamp);
-                    const key = toDayKey(ts);
-                    const userId = d.user_id as string;
-                    const customerName = d.customer_name;
-                    const pts = Number(d.points || 0);
-                    const qrType = d.qr_type || "unknown";
-
-                    // Daily 30
-                    if (dailyMap30.has(key)) {
-                        const bucket = dailyMap30.get(key)!;
-                        bucket.scans += 1;
-                        bucket.points_issued += pts;
-
-                        const daySet = userSetByDay30.get(key)!;
-                        daySet.add(userId);
+                if (dailyMap30.has(key)) {
+                    const bucket = dailyMap30.get(key)!;
+                    if (status === "redeemed") {
+                        bucket.redemptions += 1;
+                        bucket.points_redeemed += points;
                     }
+                }
 
-                    // QR type breakdown
-                    qrTypeCounts[qrType] = (qrTypeCounts[qrType] || 0) + 1;
-                    qrTypePoints[qrType] = (qrTypePoints[qrType] || 0) + pts;
-
-                    // Peak hours/days
-                    const hour = ts.getHours();
-                    const weekday = ts.getDay();
-                    hourBuckets[hour] += 1;
-                    weekdayBuckets[weekday] += 1;
-
-                    // Customer aggregates
+                // Update customer aggregates for redemptions
+                if (status === "redeemed") {
                     const prev = customerAgg.get(userId) || {
                         user_id: userId,
                         customer_name: customerName,
@@ -153,147 +240,62 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
                         last_scan: null,
                         last_redemption: null,
                     };
-                    prev.scans += 1;
-                    prev.points_earned += pts;
-                    if (!prev.last_scan || ts > prev.last_scan) {
-                        prev.last_scan = ts;
+                    prev.points_redeemed += points;
+                    prev.redemptions += 1;
+                    if (!prev.last_redemption || ts > prev.last_redemption) {
+                        prev.last_redemption = ts;
                     }
                     customerAgg.set(userId, prev);
+                }
+            });
 
-                    // New vs returning
-                    customerScanCounts30.set(userId, (customerScanCounts30.get(userId) || 0) + 1);
-                });
+            // Finalize unique users per day
+            dailyMap30.forEach((bucket, key) => {
+                const set = userSetByDay30.get(key)!;
+                bucket.unique_users = set.size;
+            });
 
-                // Process redemptions
-                redDocs.forEach((doc) => {
-                    const d = doc.data();
-                    const ts = d.created_at?.toDate ? d.created_at.toDate() : new Date(d.created_at);
-                    const key = toDayKey(ts);
-                    const userId = d.user_id as string;
-                    const customerName = d.user_name || "Unknown";
-                    const points = Number(d.points || 0);
-                    const status = d.status;
+            // Build sorted trends arrays
+            const trends30 = Array.from(dailyMap30.values()).sort((a, b) =>
+                b.date.localeCompare(a.date)
+            );
 
-                    if (dailyMap30.has(key)) {
-                        const bucket = dailyMap30.get(key)!;
-                        if (status === "redeemed") {
-                            bucket.redemptions += 1;
-                            bucket.points_redeemed += points;
-                        }
-                    }
+            const trends7 = trends30.slice(0, 7);
 
-                    // Update customer aggregates for redemptions
-                    if (status === "redeemed") {
-                        const prev = customerAgg.get(userId) || {
-                            user_id: userId,
-                            customer_name: customerName,
-                            scans: 0,
-                            points_earned: 0,
-                            points_redeemed: 0,
-                            redemptions: 0,
-                            last_scan: null,
-                            last_redemption: null,
-                        };
-                        prev.points_redeemed += points;
-                        prev.redemptions += 1;
-                        if (!prev.last_redemption || ts > prev.last_redemption) {
-                            prev.last_redemption = ts;
-                        }
-                        customerAgg.set(userId, prev);
-                    }
-                });
+            // ----- B: NEW VS RETURNING -----
+            let newUsers30 = 0;
+            let returningUsers30 = 0;
+            customerScanCounts30.forEach((count) => {
+                if (count <= 1) newUsers30 += 1;
+                else returningUsers30 += 1;
+            });
 
-                // Finalize unique users per day
-                dailyMap30.forEach((bucket, key) => {
-                    const set = userSetByDay30.get(key)!;
-                    bucket.unique_users = set.size;
-                });
+            const newVsReturning = {
+                new: newUsers30,
+                returning: returningUsers30,
+            };
 
-                // Build sorted trends arrays
-                const trends30 = Array.from(dailyMap30.values()).sort((a, b) =>
-                    b.date.localeCompare(a.date)
-                );
+            // ----- C: PEAKS -----
+            const peakHours = hourBuckets.map((count, hour) => ({ hour, scans: count }));
+            const peakDays = weekdayBuckets.map((count, weekday) => ({ weekday, scans: count }));
 
-                const trends7 = trends30.slice(-7);
+            // ----- D: QR TYPE PERFORMANCE -----
+            const qrTypeBreakdown = qrTypeCounts;
+            const qrTypePointsMap = qrTypePoints;
 
-                // ----- B: NEW VS RETURNING -----
-                let newUsers30 = 0;
-                let returningUsers30 = 0;
-                customerScanCounts30.forEach((count) => {
-                    if (count <= 1) newUsers30 += 1;
-                    else returningUsers30 += 1;
-                });
-
-                const newVsReturning = {
-                    new: newUsers30,
-                    returning: returningUsers30,
-                };
-
-                // ----- C: PEAKS -----
-                const peakHours = hourBuckets.map((count, hour) => ({ hour, scans: count }));
-                const peakDays = weekdayBuckets.map((count, weekday) => ({ weekday, scans: count }));
-
-                // ----- D: QR TYPE PERFORMANCE -----
-                const qrTypeBreakdown = qrTypeCounts;
-                const qrTypePointsMap = qrTypePoints;
-
-                // ----- E: TOP CUSTOMERS - UPDATED with redemption info -----
-                const topCustomers = Array.from(customerAgg.values())
-                    .sort((a, b) => b.scans - a.scans)
-                    .slice(0, 20)
-                    .map((c) => ({
-                        user_id: c.user_id,
-                        customer_name: c.customer_name,
-                        total_scans: c.scans,
-                        total_points_earned: c.points_earned,
-                        total_points_redeemed: c.points_redeemed,
-                        total_redemptions: c.redemptions,
-                        redemption_ratio: c.points_earned > 0
-                            ? Math.round((c.points_redeemed / c.points_earned) * 100)
-                            : 0,
-                        last_scan: c.last_scan,
-                        last_redemption: c.last_redemption,
-                    }));
-
-                // ----- F: REWARD REDEMPTION FUNNEL - ENHANCED -----
-                const redeemedCustomerSet = new Set<string>();
-                const pendingCustomerSet = new Set<string>();
-                let totalRedemptions30 = 0;
-                let pendingRedemptions30 = 0;
-                let totalPointsRedeemed30 = 0;
-
-                redDocs.forEach((doc) => {
-                    const d = doc.data();
-                    const userId = d.user_id as string;
-                    const points = Number(d.points || 0);
-                    const status = d.status;
-
-                    if (status === "redeemed") {
-                        totalRedemptions30++;
-                        totalPointsRedeemed30 += points;
-                        redeemedCustomerSet.add(userId);
-                    } else if (status === "pending") {
-                        pendingRedemptions30++;
-                        pendingCustomerSet.add(userId);
-                    }
-                });
-
-                const earnedCustomers30 = customerAgg.size;
-                const redeemedCustomers30 = redeemedCustomerSet.size;
-                const pendingCustomers30 = pendingCustomerSet.size;
-
-                const rewardFunnel = {
-                    earned_customers: earnedCustomers30,
-                    redeemed_customers: redeemedCustomers30,
-                    pending_customers: pendingCustomers30,
-                    total_redemptions: totalRedemptions30,
-                    pending_redemptions: pendingRedemptions30,
-                    total_points_redeemed: totalPointsRedeemed30,
-                    redemption_rate: earnedCustomers30 > 0
-                        ? Math.round((redeemedCustomers30 / earnedCustomers30) * 100)
-                        : 0,
-                    average_redemption_value: redeemedCustomers30 > 0
-                        ? Math.round(totalPointsRedeemed30 / redeemedCustomers30)
+            // ----- E: TOP CUSTOMERS - UPDATED with redemption info -----
+            const topCustomers = Array.from(customerAgg.values())
+                .sort((a, b) => b.scans - a.scans)
+                .slice(0, 20)
+                .map((c) => ({
+                    user_id: c.user_id,
+                    customer_name: c.customer_name,
+                    total_scans: c.scans,
+                    total_points_earned: c.points_earned,
+                    total_points_redeemed: c.points_redeemed,
+                    total_redemptions: c.redemptions,
+                    redemption_ratio: c.points_earned > 0
+                        ? Math.round((c.points_redeemed / c.points_earned) * 100)
                         : 0,
                 };
 

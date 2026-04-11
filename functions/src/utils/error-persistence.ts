@@ -92,3 +92,65 @@ export async function persistErrorToFirestore(data: ErrorLogInput): Promise<void
     );
   }
 }
+
+// ── Client-side log persistence ───────────────────────────────────────────
+
+export interface ClientLogInput {
+  level: string;
+  source: string;
+  message: string;
+  stack?: string;
+  componentStack?: string;
+  endpoint?: string;
+  httpStatus?: number;
+  appVersion: string;
+  platform: string;
+  appId: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Persist a single front-end log event to the `error_logs` collection.
+ * Uses `source: "client"` as discriminator vs. server-side entries.
+ * Each client log is a standalone document (no deduplication) so that
+ * per-user crash instances are individually traceable.
+ *
+ * This function MUST NOT throw — failures are swallowed and logged internally.
+ */
+export async function persistClientLog(
+  data: ClientLogInput,
+  userId?: string,
+): Promise<void> {
+  try {
+    await db.collection("error_logs").add({
+      source: "client",
+      level: data.level,
+      log_source: data.source,
+      error_message: data.message,
+      stack_trace: data.stack ?? null,
+      component_stack: data.componentStack ?? null,
+      endpoint: data.endpoint ?? null,
+      status_code: data.httpStatus ?? null,
+      app_version: data.appVersion,
+      platform: data.platform,
+      app_id: data.appId,
+      user_id: userId ?? null,
+      metadata: data.metadata ?? {},
+      client_timestamp: data.timestamp,
+      occurrences: 1,
+      resolved: false,
+      resolved_at: null,
+      resolved_by: null,
+      resolution_notes: null,
+      first_seen: adminRef.firestore.FieldValue.serverTimestamp(),
+      last_seen: adminRef.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    logger.error(
+      "error-persistence: failed to write client log",
+      err as Error,
+      { appId: data.appId, level: data.level },
+    );
+  }
+}

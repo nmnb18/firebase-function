@@ -6,7 +6,7 @@ import { correlationMiddleware } from "./middleware/correlation";
 import { sanitizePIIMiddleware } from "./middleware/sanitize-pii";
 import { errorHandlerMiddleware } from "./middleware/error-handler";
 import { validateBody, validateQuery } from "./middleware/validate";
-import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit } from "./middleware/rate-limit";
+import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit, clientLogRateLimit } from "./middleware/rate-limit";
 
 // Validation schemas
 import {
@@ -54,6 +54,10 @@ import {
     unregisterPushTokenSchema,
     markNotificationsReadSchema,
 } from "./validation/push.schemas";
+import { clientLogBatchSchema } from "./validation/client-log.schemas";
+
+// Logging
+import { clientLogHandler } from "./modules/logging/client-log";
 
 // Dashboard
 import { errorDashboardHandler } from "./modules/dashboard/error-dashboard";
@@ -235,6 +239,9 @@ router.post("/unregisterPushToken", validateBody(unregisterPushTokenSchema), unr
 router.get("/getNotifications", getNotificationsHandler);
 router.get("/getUnreadNotificationCount", getUnreadNotificationCountHandler);
 router.post("/markNotificationsRead", validateBody(markNotificationsReadSchema), markNotificationsReadHandler);
+
+// Client Logging (FE crash / network error ingest)
+router.post("/clientLog", clientLogRateLimit, validateBody(clientLogBatchSchema), clientLogHandler);
 
 // Dashboard
 router.get("/sellerStats", sellerStatsHandler);

@@ -47,3 +47,13 @@ export const qrScanRateLimit = rateLimit({
     message: rateLimitMessage("QR scan"),
     skip: () => process.env.NODE_ENV === "test" || !!process.env.FUNCTIONS_EMULATOR,
 });
+
+/** 120 log batches per IP per minute — generous for crash / error reporting */
+export const clientLogRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: rateLimitMessage("log ingestion"),
+    skip: () => process.env.NODE_ENV === "test" || !!process.env.FUNCTIONS_EMULATOR,
+});

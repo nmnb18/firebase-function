@@ -5,54 +5,7 @@ import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/resp
 
 export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-
-                const currentUser = await authenticateUser(req.headers.authorization);
-                if (!currentUser || !currentUser.uid) {
-                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
-                }
-
-                // Time windows
-                const now = new Date();
-                const last30 = new Date();
-                last30.setDate(now.getDate() - 30);
-                last30.setHours(0, 0, 0, 0);
-
-                const last7 = new Date();
-                last7.setDate(now.getDate() - 7);
-                last7.setHours(0, 0, 0, 0);
-
-                // Parallel: Get seller profile + all transactions + all redemptions + filtered points
-                const [profileQuery, txSnapshot, redSnapshot, pointsSnapshot] = await Promise.all([
-                    db.collection("seller_profiles")
-                        .where("user_id", "==", currentUser.uid)
-                        .limit(1)
-                        .get(),
-                    db.collection("transactions")
-                        .where("transaction_type", "==", "earn")
-                        .where("timestamp", ">=", last30)
-                        .get(),
-                    db.collection("redemptions")
-                        .where("created_at", ">=", last30)
-                        .get(),
-                    db.collection("points")
-                        .get()  // Still fetch all for dormant segment calculation
-                ]);
-
-                if (profileQuery.empty) {
-                    return sendError(res, ErrorCodes.NOT_FOUND, "Seller profile not found", HttpStatus.NOT_FOUND);
-                }
-
-                const profileDoc = profileQuery.docs[0];
-                const sellerId = profileDoc.id;
-                const sellerData = profileDoc.data();
-                const tier: "free" | "pro" | "premium" = sellerData?.subscription?.tier || "free";
-
-                // Block free tier
-                if (tier === "free") {
-                    return sendError(res, ErrorCodes.FORBIDDEN, "Advanced analytics are available only on Pro or Premium plans.", HttpStatus.FORBIDDEN);
-                }
-
-            const currentUser = await authenticateUser(req.headers.authorization);
+        const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser || !currentUser.uid) {
                 return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
             }
@@ -297,95 +250,112 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
                     redemption_ratio: c.points_earned > 0
                         ? Math.round((c.points_redeemed / c.points_earned) * 100)
                         : 0,
-                };
+                }));
 
-                // ----- G: SEGMENTS - ENHANCED with redemption behavior -----
-                let segNew = 0;
-                let segRegular = 0;
-                let segLoyal = 0;
-                let segRedeemer = 0; // Customers who have redeemed
-                let segHighValue = 0; // Customers with high redemption value
+            // ----- F: REWARD FUNNEL -----
+            const totalScans = txDocs.length;
+            const totalPointsIssued = txDocs.reduce((sum, doc) => sum + Number(doc.data().points || 0), 0);
+            const totalRedemptions = redDocs.filter(doc => doc.data().status === "redeemed").length;
+            const totalPointsRedeemed = redDocs
+                .filter(doc => doc.data().status === "redeemed")
+                .reduce((sum, doc) => sum + Number(doc.data().points || 0), 0);
 
-                customerScanCounts30.forEach((count, userId) => {
-                    const customer = customerAgg.get(userId);
-                    const hasRedeemed = customer?.redemptions && customer?.redemptions > 0;
-                    const redemptionRatio = customer?.points_earned && customer?.points_earned > 0
-                        ? (customer.points_redeemed / customer.points_earned)
-                        : 0;
+            const rewardFunnel = {
+                total_scans: totalScans,
+                total_points_issued: totalPointsIssued,
+                total_redemptions: totalRedemptions,
+                total_points_redeemed: totalPointsRedeemed,
+                redemption_rate: totalScans > 0 ? Math.round((totalRedemptions / totalScans) * 100) : 0,
+                points_redemption_rate: totalPointsIssued > 0 ? Math.round((totalPointsRedeemed / totalPointsIssued) * 100) : 0,
+            };
 
-                    if (count === 1) segNew += 1;
-                    else if (count >= 2 && count <= 3) segRegular += 1;
-                    else if (count >= 4) segLoyal += 1;
+            // ----- G: SEGMENTS - ENHANCED with redemption behavior -----
+            let segNew = 0;
+            let segRegular = 0;
+            let segLoyal = 0;
+            let segRedeemer = 0; // Customers who have redeemed
+            let segHighValue = 0; // Customers with high redemption value
 
-                    if (hasRedeemed) segRedeemer += 1;
-                    if (redemptionRatio >= 0.5) segHighValue += 1; // Redeemed at least 50% of earned points
-                });
+            customerScanCounts30.forEach((count, userId) => {
+                const customer = customerAgg.get(userId);
+                const hasRedeemed = customer?.redemptions && customer?.redemptions > 0;
+                const redemptionRatio = customer?.points_earned && customer?.points_earned > 0
+                    ? (customer.points_redeemed / customer.points_earned)
+                    : 0;
 
-                // Dormant customers - use pre-fetched points data
-                let segDormant = 0;
-                pointsDocs.forEach((doc) => {
-                    const d = doc.data();
-                    const uid = d.user_id as string;
-                    const points = Number(d.points || 0);
-                    // Customer has points but no scans in 30 days AND no pending redemptions
-                    if (!customerScanCounts30.has(uid) && points > 0) {
-                        segDormant += 1;
-                    }
-                });
+                if (count === 1) segNew += 1;
+                else if (count >= 2 && count <= 3) segRegular += 1;
+                else if (count >= 4) segLoyal += 1;
 
-                const segments = {
-                    new: segNew,
-                    regular: segRegular,
-                    loyal: segLoyal,
-                    redeemer: segRedeemer,
-                    high_value: segHighValue,
-                    dormant: segDormant,
-                };
+                if (hasRedeemed) segRedeemer += 1;
+                if (redemptionRatio >= 0.5) segHighValue += 1; // Redeemed at least 50% of earned points
+            });
 
-                // ----- H: REDEMPTION ANALYTICS - UPDATED with pre-fetched data -----
-                const redemptionAnalytics = {
-                    average_processing_time: calculateAverageProcessingTime(redDocs),
-                    popular_redemption_points: getPopularRedemptionPoints(redDocs),
-                    peak_redemption_hours: getPeakRedemptionHours(redDocs),
-                    failed_redemptions: getFailedRedemptionsCount(redDocs, last30),
-                };
+            // Dormant customers - use pre-fetched points data
+            let segDormant = 0;
+            pointsDocs.forEach((doc) => {
+                const d = doc.data();
+                const uid = d.user_id as string;
+                const points = Number(d.points || 0);
+                // Customer has points but no scans in 30 days AND no pending redemptions
+                if (!customerScanCounts30.has(uid) && points > 0) {
+                    segDormant += 1;
+                }
+            });
 
-                // ----- FINAL RESPONSE -----
-                return sendSuccess(res, {
-                    seller_id: sellerId,
-                    seller_name: sellerData?.business.shop_name ?? null,
-                    subscription_tier: tier,
+            const segments = {
+                new: segNew,
+                regular: segRegular,
+                loyal: segLoyal,
+                redeemer: segRedeemer,
+                high_value: segHighValue,
+                dormant: segDormant,
+            };
 
-                    // A
-                    trends_7d: trends7,
-                    trends_30d: trends30,
+            // ----- H: REDEMPTION ANALYTICS - UPDATED with pre-fetched data -----
+            const redemptionAnalytics = {
+                average_processing_time: calculateAverageProcessingTime(redDocs),
+                popular_redemption_points: getPopularRedemptionPoints(redDocs),
+                peak_redemption_hours: getPeakRedemptionHours(redDocs),
+                failed_redemptions: getFailedRedemptionsCount(redDocs, last30),
+            };
 
-                    // B
-                    new_vs_returning_30d: newVsReturning,
+            // ----- FINAL RESPONSE -----
+            return sendSuccess(res, {
+                seller_id: sellerId,
+                seller_name: sellerData?.business.shop_name ?? null,
+                subscription_tier: tier,
 
-                    // C
-                    peak_hours: peakHours,
-                    peak_days: peakDays,
+                // A
+                trends_7d: trends7,
+                trends_30d: trends30,
 
-                    // D
-                    qr_type_breakdown: qrTypeBreakdown,
-                    qr_type_points: qrTypePointsMap,
+                // B
+                new_vs_returning_30d: newVsReturning,
 
-                    // E
-                    top_customers: topCustomers,
+                // C
+                peak_hours: peakHours,
+                peak_days: peakDays,
 
-                    // F
-                    reward_funnel: rewardFunnel,
+                // D
+                qr_type_breakdown: qrTypeBreakdown,
+                qr_type_points: qrTypePointsMap,
 
-                    // G
-                    segments,
+                // E
+                top_customers: topCustomers,
 
-                    // H
-                    redemption_analytics: redemptionAnalytics,
+                // F
+                reward_funnel: rewardFunnel,
 
-                    // I
-                    export_available: tier === "premium",
-                }, HttpStatus.OK);
+                // G
+                segments,
+
+                // H
+                redemption_analytics: redemptionAnalytics,
+
+                // I
+                export_available: tier === "premium",
+            }, HttpStatus.OK);
     } catch (err) {
         next(err);
     }

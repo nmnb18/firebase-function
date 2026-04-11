@@ -1,11 +1,8 @@
 // firebase-functions/src/seller/updateSellerProfile.ts
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db, adminRef } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
-
-const corsHandler = cors({ origin: true });
 
 // Helper function to generate unique offer ID
 function generateOfferId(sellerId: string, index: number): string {
@@ -49,12 +46,8 @@ function prepareOffersData(offersData: any, existingOffers: any[], sellerId: str
     return existingOffers;
 }
 
-export const updateSellerProfileHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        try {
-            if (req.method !== "PATCH") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "PATCH method required", HttpStatus.METHOD_NOT_ALLOWED);
-            }
+export const updateSellerProfileHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
             // Authenticate
             const currentUser = await authenticateUser(req.headers.authorization);
@@ -152,14 +145,10 @@ export const updateSellerProfileHandler = (req: Request, res: Response): void =>
                 updated: updatePayload,
                 seller_profile: updatedData
             }, HttpStatus.OK);
-        } catch (error: any) {
-            console.error("Update seller profile error:", error);
-
-            if (error.code === "auth/argument-error") {
-                return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
-            }
-
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to update profile. Please try again.", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    } catch (error: any) {
+        if (error.code === "auth/argument-error") {
+            return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
         }
-    });
+        next(error);
+    }
 };

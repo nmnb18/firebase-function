@@ -1,11 +1,8 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { auth, db, adminRef } from "../../config/firebase";
-import cors from "cors";
 import crypto from "crypto";
 import { resolveCityStatus, sendVerificationEmail } from "../../utils/helper";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
-
-const corsHandler = cors({ origin: true });
 
 interface RegisterUserData {
     name: string;
@@ -23,14 +20,8 @@ interface RegisterUserData {
     lng: number;
 }
 
-export const registerUserHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-
-        if (req.method !== "POST") {
-            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST method required", HttpStatus.METHOD_NOT_ALLOWED);
-        }
-
-        try {
+export const registerUserHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
             const data = req.body as RegisterUserData;
 
             const {
@@ -182,14 +173,10 @@ export const registerUserHandler = (req: Request, res: Response): void => {
                 city_status: cityStatus
             }, HttpStatus.OK);
 
-        } catch (error: any) {
-            console.error("Registration Error:", error);
-
-            if (error.code === "auth/email-already-exists") {
-                return sendError(res, ErrorCodes.ALREADY_EXISTS, "Email already exists", HttpStatus.BAD_REQUEST);
-            }
-
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Registration failed", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    } catch (error: any) {
+        if (error.code === "auth/email-already-exists") {
+            return sendError(res, ErrorCodes.ALREADY_EXISTS, "Email already exists", HttpStatus.BAD_REQUEST);
         }
-    });
+        next(error);
+    }
 };

@@ -1,18 +1,10 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db, adminRef } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-
-export const updateUserProfileHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "PATCH") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "PATCH method required", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const updateUserProfileHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 // Authenticate
                 const currentUser = await authenticateUser(req.headers.authorization);
@@ -77,14 +69,10 @@ export const updateUserProfileHandler = (req: Request, res: Response): void => {
                     updated: updatePayload,
                     customer_profile: updatedData
                 }, HttpStatus.OK);
-            } catch (error: any) {
-                console.error("Update customer profile error:", error);
-
-                if (error.code === "auth/argument-error") {
-                    return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
-                }
-
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to update profile. Please try again.", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (error: any) {
+        if (error.code === "auth/argument-error") {
+            return sendError(res, ErrorCodes.UNAUTHORIZED, "Invalid or expired token", HttpStatus.UNAUTHORIZED);
+        }
+        next(error);
+    }
 };

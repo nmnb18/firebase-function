@@ -1,5 +1,7 @@
 import { auth } from "../config/firebase";
 import jwt from "jsonwebtoken";
+import { AppError } from "../utils/errors";
+import { ErrorCodes, HttpStatus } from "../utils/response";
 
 export interface AuthenticatedUser {
     uid: string;
@@ -7,10 +9,10 @@ export interface AuthenticatedUser {
     [key: string]: any;
 }
 
-export class AuthError extends Error {
-    constructor(message: string, public statusCode: number = 401) {
-        super(message);
-        this.name = 'AuthError';
+export class AuthError extends AppError {
+    constructor(message: string, statusCode: number = HttpStatus.UNAUTHORIZED) {
+        super(message, ErrorCodes.UNAUTHORIZED, statusCode, true);
+        this.name = "AuthError";
     }
 }
 
@@ -41,17 +43,15 @@ export const authenticateUser = async (authorizationHeader: string | undefined):
         const decodedToken = await auth.verifyIdToken(token);
         return decodedToken;
     } catch (error: any) {
-        console.error("Token verification failed:", error);
-
         // Handle specific Firebase auth errors
         if (error.code === 'auth/id-token-expired') {
-            throw new AuthError("Token has expired", 401);
+            throw new AuthError("Token has expired");
         } else if (error.code === 'auth/id-token-revoked') {
-            throw new AuthError("Token has been revoked", 401);
+            throw new AuthError("Token has been revoked");
         } else if (error.code === 'auth/argument-error') {
-            throw new AuthError("Invalid token format", 401);
+            throw new AuthError("Invalid token format");
         } else {
-            throw new AuthError("Invalid token", 401);
+            throw new AuthError("Invalid token");
         }
     }
 };

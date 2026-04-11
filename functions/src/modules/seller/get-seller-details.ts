@@ -1,21 +1,17 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db, auth } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { enforceSubscriptionStatus } from "../../utils/subscription";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
-export const getSellerDetailsHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "GET") return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
 
-            const uid = req.query.uid as string;
+export const getSellerDetailsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const uid = req.query.uid as string;
             if (!uid) return sendError(res, ErrorCodes.MISSING_REQUIRED_FIELD, "UID required", HttpStatus.BAD_REQUEST);
 
-            try {
+    try {
                 // Caching (60s)
                 // const cacheKey = `seller_details:${uid}`;
                 // const cached = cache.get<any>(cacheKey);
@@ -53,9 +49,7 @@ export const getSellerDetailsHandler = (req: Request, res: Response): void => {
                         ...(sellerProfile ? { seller_profile: sellerProfile } : {}),
                     }
                 }, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("getSellerDetails error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

@@ -1,10 +1,8 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 // In-memory cache for nearby sellers (keyed by lat,lng, 30s)
 const nearbySellersCache: { [key: string]: { data: any, expires: number } } = {};
 const SEARCH_RADIUS_KM = 25;
@@ -25,14 +23,8 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-export const getNearbySellersHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-
-            if (req.method !== "GET") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            try {
+export const getNearbySellersHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 // Extract user's current location if provided
                 let userLat = req.query.lat ? Number(req.query.lat) : null;
                 let userLng = req.query.lng ? Number(req.query.lng) : null;
@@ -142,11 +134,9 @@ export const getNearbySellersHandler = (req: Request, res: Response): void => {
 
                 return sendSuccess(res, { total: nearbySellers.length, sellers: nearbySellers }, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("getNearbySellers Error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Internal server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 
 

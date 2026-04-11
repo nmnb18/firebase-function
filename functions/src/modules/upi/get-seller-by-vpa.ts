@@ -1,26 +1,10 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-/**
- * GET /getSellerByVPA?vpa=seller@bank
- *
- * Looks up a seller profile by UPI VPA so the user app can show seller
- * details and a points-preview before initiating payment.
- *
- * Auth: Firebase JWT required (user token)
- */
-export const getSellerByVPAHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        if (req.method !== "GET") {
-            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
-        }
-
-        try {
+export const getSellerByVPAHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser?.uid) {
                 return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
@@ -50,9 +34,7 @@ export const getSellerByVPAHandler = (req: Request, res: Response): void => {
                 category: data.business?.category || "",
                 reward_config: data.rewards || {},
             }, HttpStatus.OK);
-        } catch (error: any) {
-            console.error("getSellerByVPA error:", error);
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    });
+    } catch (err) {
+        next(err);
+    }
 };

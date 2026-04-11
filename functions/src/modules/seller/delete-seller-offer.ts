@@ -1,18 +1,13 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
 
-export const deleteSellerOfferHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "DELETE")
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "DELETE only", HttpStatus.METHOD_NOT_ALLOWED);
+export const deleteSellerOfferHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 // authenticate
                 const currentUser = await authenticateUser(req.headers.authorization);
@@ -35,9 +30,7 @@ export const deleteSellerOfferHandler = (req: Request, res: Response): void => {
                 const cacheKey = `seller_offers:${seller_id}`;
                 cache.delete(cacheKey);
                 return sendSuccess(res, {}, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("deleteSellerOffer error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

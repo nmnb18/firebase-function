@@ -1,5 +1,4 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
@@ -7,16 +6,8 @@ import { generateInternalOrderId } from "../../utils/helper";
 import { PLAN_CONFIG } from "../../utils/constant";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-
-export const verifyPaymentHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            try {
+export const verifyPaymentHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
                     return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
@@ -209,11 +200,9 @@ export const verifyPaymentHandler = (req: Request, res: Response): void => {
                         coupon_used: couponUsed ? couponUsed.code : null,
                     },
                 }, HttpStatus.OK);
-            } catch (error: any) {
-                console.error("Payment verification error:", error);
-                return sendError(res, ErrorCodes.PAYMENT_VERIFICATION_FAILED, error.message || "Internal error", HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 
 // Helper function removed - coupon usage now part of main atomic batch

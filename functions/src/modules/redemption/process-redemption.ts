@@ -1,21 +1,13 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { Redemption } from "../../types/redemption";
 import { saveNotification } from "../../utils/helper";
 import pushService, { NotificationChannel, NotificationType } from "../../services/expo-service";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const processRedemptionHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            try {
+export const processRedemptionHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 // Authenticate seller
                 const sellerUser = await authenticateUser(req.headers.authorization);
 
@@ -221,11 +213,9 @@ export const processRedemptionHandler = (req: Request, res: Response): void => {
                     timestamp: new Date().toISOString()
                 }, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("Process redemption error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Internal server error", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 
 async function releasePointHold(redemptionId: string) {

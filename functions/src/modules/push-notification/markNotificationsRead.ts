@@ -1,13 +1,10 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-export const markNotificationsReadHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
+export const markNotificationsReadHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const user = await authenticateUser(req.headers.authorization);
                 if (!user?.uid) return sendError(res, ErrorCodes.UNAUTHORIZED, "Unauthorized", HttpStatus.UNAUTHORIZED);
 
@@ -26,9 +23,7 @@ export const markNotificationsReadHandler = (req: Request, res: Response): void 
                 await batch.commit();
 
                 return sendSuccess(res, { message: "Notifications marked as read" }, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("Mark read error", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

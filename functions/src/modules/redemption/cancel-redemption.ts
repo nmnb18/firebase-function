@@ -1,19 +1,11 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { Redemption } from "../../types/redemption";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const cancelRedemptionHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            try {
+export const cancelRedemptionHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 const currentUser = await authenticateUser(req.headers.authorization);
                 const { redemption_id } = req.body;
 
@@ -52,11 +44,9 @@ export const cancelRedemptionHandler = (req: Request, res: Response): void => {
 
                 return sendSuccess(res, { message: "Redemption cancelled successfully", redemption_id }, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("Cancel redemption error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 async function releasePointHold(redemptionId: string) {
     const holdsQuery = await db.collection("point_holds")

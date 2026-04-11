@@ -1,5 +1,4 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import {
@@ -9,15 +8,8 @@ import {
 } from "../../utils/qr-helper";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const createRedemptionHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
-
-            try {
+export const createRedemptionHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
                 // 🔐 Authenticate user
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid) {
@@ -159,9 +151,7 @@ export const createRedemptionHandler = (req: Request, res: Response): void => {
                     seller_name: seller?.business?.shop_name,
                     points,
                 }, HttpStatus.OK);
-            } catch (error: any) {
-                console.error("createRedemption error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Failed to create redemption", HttpStatus.BAD_REQUEST);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

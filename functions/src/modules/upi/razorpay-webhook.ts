@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import cors from "cors";
 import crypto from "crypto";
 import { db, adminRef } from "../../config/firebase";
 import { calculateRewardPoints } from "../../utils/calculate-reward-points";
@@ -14,26 +13,8 @@ import {
 } from "../../utils/points-transaction-helpers";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-/**
- * POST /razorpayWebhook
- *
- * Receives Razorpay webhook events and awards loyalty points on
- * "payment.captured". Uses its own signature verification via
- * X-Razorpay-Signature and RAZORPAY_WEBHOOK_SECRET — no Firebase auth.
- *
- * Fully idempotent: safe to receive the same event multiple times.
- * Raw body is attached as (req as any).rawBody by the express.json verify
- * callback registered in app.ts.
- */
-export const razorpayWebhookHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        if (req.method !== "POST") {
-            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "POST only", HttpStatus.METHOD_NOT_ALLOWED);
-        }
-
-        try {
+export const razorpayWebhookHandler = async (req: Request, res: Response): Promise<void> => {
+    try {
             // ── 1. Verify webhook signature ────────────────────────────────────────────
             const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
             if (!webhookSecret) {
@@ -153,10 +134,9 @@ export const razorpayWebhookHandler = (req: Request, res: Response): void => {
             ]);
 
             return sendSuccess(res, { received: true, points_awarded: pointsEarned }, HttpStatus.OK);
-        } catch (error: any) {
-            console.error("razorpayWebhook error:", error);
-            // Always 200 to Razorpay to prevent retries on server errors
-            return res.status(200).json({ received: true, error: "Internal processing error" });
-        }
-    });
+    } catch (error: any) {
+        console.error("razorpayWebhook error:", error);
+        // Always 200 to Razorpay to prevent retries on server errors
+        res.status(200).json({ received: true, error: "Internal processing error" });
+    }
 };

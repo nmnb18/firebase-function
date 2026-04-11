@@ -1,20 +1,13 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { v4 as uuidv4 } from "uuid";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
 const bucket = adminRef.storage().bucket();
 
-export const updateSellerMediaHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        try {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Method not allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
+export const updateSellerMediaHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser?.uid) {
@@ -59,9 +52,7 @@ export const updateSellerMediaHandler = (req: Request, res: Response): void => {
 
             return sendSuccess(res, { media: updates }, HttpStatus.OK);
 
-        } catch (error: any) {
-            console.error("updateSellerMedia Error:", error);
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    });
+    } catch (err) {
+        next(err);
+    }
 };

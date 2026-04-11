@@ -1,15 +1,11 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { Redemption } from "../../types/redemption";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const markRedemptionAsExpiredHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            if (req.method !== "POST") {
+export const markRedemptionAsExpiredHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const { redemption_id } = req.body;
 
@@ -40,8 +36,9 @@ export const markRedemptionAsExpiredHandler = (req: Request, res: Response): voi
                 await releasePointHold(redemption_id);
 
                 return sendSuccess(res, {}, HttpStatus.OK);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 
 async function releasePointHold(redemptionId: string) {

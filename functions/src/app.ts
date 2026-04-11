@@ -1,6 +1,14 @@
 import express from "express";
 import cors from "cors";
 
+// Middleware
+import { correlationMiddleware } from "./middleware/correlation";
+import { sanitizePIIMiddleware } from "./middleware/sanitize-pii";
+import { errorHandlerMiddleware } from "./middleware/error-handler";
+
+// Dashboard
+import { errorDashboardHandler } from "./modules/dashboard/error-dashboard";
+
 // Auth
 import { changePasswordHandler } from "./modules/auth/changePassword";
 import { confirmPasswordResetHandler } from "./modules/auth/confirmPasswordReset";
@@ -91,6 +99,10 @@ app.use(express.json({
     verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
 
+// ── Observability middleware (runs before every route) ─────────────────────
+app.use(correlationMiddleware);
+app.use(sanitizePIIMiddleware);
+
 const router = express.Router();
 
 // Warmup
@@ -176,7 +188,11 @@ router.post("/markNotificationsRead", markNotificationsReadHandler);
 
 // Dashboard
 router.get("/sellerStats", sellerStatsHandler);
+router.get("/admin/errorDashboard", errorDashboardHandler);
 
 app.use("/", router);
+
+// ── Centralized error handler (MUST be last) ───────────────────────────────
+app.use(errorHandlerMiddleware);
 
 export { app };

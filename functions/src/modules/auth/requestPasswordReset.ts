@@ -1,15 +1,8 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const requestPasswordResetHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        try {
-            if (req.method !== "POST") {
-                return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only POST allowed", HttpStatus.METHOD_NOT_ALLOWED);
-            }
+export const requestPasswordResetHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
             const { email } = req.body;
 
@@ -44,8 +37,7 @@ export const requestPasswordResetHandler = (req: Request, res: Response): void =
 
             return sendSuccess(res, { message: "Password reset email sent." }, HttpStatus.OK);
 
-        } catch (err: any) {
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    });
+    } catch (err) {
+        next(err);
+    }
 };

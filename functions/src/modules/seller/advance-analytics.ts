@@ -1,17 +1,10 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const sellerAdvancedAnalyticsHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only GET allowed", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
@@ -391,11 +384,9 @@ export const sellerAdvancedAnalyticsHandler = (req: Request, res: Response): voi
                     // I
                     export_available: tier === "premium",
                 }, HttpStatus.OK);
-            } catch (error: any) {
-                console.error("sellerAdvancedAnalytics error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message || "Server error in advanced analytics", HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };
 
 // Helper functions for redemption analytics - now working with pre-fetched documents

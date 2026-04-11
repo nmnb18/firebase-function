@@ -1,18 +1,11 @@
 // firebase-functions/src/redemption/redemptionAnalytics.ts
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
-import cors from "cors";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const redemptionAnalyticsHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET") {
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only GET allowed", HttpStatus.METHOD_NOT_ALLOWED);
-                }
+export const redemptionAnalyticsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser || !currentUser.uid) {
@@ -199,9 +192,7 @@ export const redemptionAnalyticsHandler = (req: Request, res: Response): void =>
                     redemptions: redemptions.slice(0, 50) // Return recent redemptions
                 }, HttpStatus.OK);
 
-            } catch (error: any) {
-                console.error("Redemption analytics error:", error);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, error.message, error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

@@ -1,18 +1,10 @@
-import { Request, Response } from "express";
-import cors from "cors";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
-
-export const getSubscriptionHistoryHandler = (req: Request, res: Response): void => {
-    corsHandler(req, res, async () => {
-        if (req.method !== "GET") {
-            return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "Only GET allowed", HttpStatus.METHOD_NOT_ALLOWED);
-        }
-
-        try {
+export const getSubscriptionHistoryHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
             // Authenticate user
             const currentUser = await authenticateUser(req.headers.authorization);
             if (!currentUser || !currentUser.uid) {
@@ -49,9 +41,7 @@ export const getSubscriptionHistoryHandler = (req: Request, res: Response): void
 
             return sendSuccess(res, { history, total: history.length }, HttpStatus.OK);
 
-        } catch (error: any) {
-            console.error("Get subscription history error:", error);
-            return sendError(res, ErrorCodes.INTERNAL_ERROR, "Failed to fetch subscription history", error.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    });
+    } catch (err) {
+        next(err);
+    }
 };

@@ -1,17 +1,13 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { db } from "../../config/firebase";
-import cors from "cors";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
-const corsHandler = cors({ origin: true });
 const cache = createCache();
-export const getSellerOffersHandler = (req: Request, res: Response): void => {
-        corsHandler(req, res, async () => {
-            try {
-                if (req.method !== "GET")
-                    return sendError(res, ErrorCodes.METHOD_NOT_ALLOWED, "GET only", HttpStatus.METHOD_NOT_ALLOWED);
+
+export const getSellerOffersHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
 
                 const currentUser = await authenticateUser(req.headers.authorization);
                 if (!currentUser?.uid)
@@ -64,9 +60,7 @@ export const getSellerOffersHandler = (req: Request, res: Response): void => {
                 };
                 //cache.set(cacheKey, responseData, 60000);
                 return sendSuccess(res, { today, active: activeSnap.docs.map((d) => ({ id: d.id, ...d.data() })), upcoming: upcomingSnap.docs.map((d) => ({ id: d.id, ...d.data() })), expired: expiredSnap.docs.map((d) => ({ id: d.id, ...d.data() })) }, HttpStatus.OK);
-            } catch (err: any) {
-                console.error("getSellerOffers error:", err);
-                return sendError(res, ErrorCodes.INTERNAL_ERROR, err.message, err.statusCode ?? HttpStatus.INTERNAL_SERVER_ERROR);
-            }
-        });
+    } catch (err) {
+        next(err);
+    }
 };

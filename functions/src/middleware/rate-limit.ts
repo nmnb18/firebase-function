@@ -48,6 +48,16 @@ export const qrScanRateLimit = rateLimit({
     skip: () => process.env.NODE_ENV === "test" || !!process.env.FUNCTIONS_EMULATOR,
 });
 
+/** 5 OTP send attempts per IP per 10 minutes — prevents SMS cost abuse */
+export const otpRateLimit = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: rateLimitMessage("OTP request"),
+    skip: () => process.env.NODE_ENV === "test" || !!process.env.FUNCTIONS_EMULATOR,
+});
+
 /** 120 log batches per IP per minute — generous for crash / error reporting */
 export const clientLogRateLimit = rateLimit({
     windowMs: 60 * 1000,

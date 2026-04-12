@@ -163,7 +163,45 @@ async function seed() {
         console.log(`✔  transactions — seed earn transaction`);
     }
 
-    // 5. Test seller Auth user (maps to seller_001 — Cafe Brew House)
+    // 5. app_config/mobile — OTP provider config (read by GET /getConfig)
+    await db.collection("app_config").doc("mobile").set({
+        otp_provider: "firebase",
+        updated_at: new Date(),
+    });
+    console.log("✔  app_config/mobile (otp_provider: firebase)");
+
+    // 6. Test phone number user (phone OTP flow) — pre-create profile so login doesn't fail
+    const testPhoneUid = "test_phone_user";
+    try {
+        await auth.createUser({
+            uid: testPhoneUid,
+            phoneNumber: "+919999900001",
+            displayName: "Phone Test User",
+        });
+        console.log("✔  Auth phone user: +91 9999900001 (uid: test_phone_user)");
+    } catch (e) {
+        if (e.code === "auth/uid-already-exists" || e.code === "auth/phone-number-already-exists") {
+            console.log("ℹ  Phone test user already exists");
+        } else {
+            console.error("✘  Phone test user creation failed:", e.message);
+        }
+    }
+    await db.collection("customer_profiles").doc(testPhoneUid).set({
+        uid: testPhoneUid,
+        user_id: testPhoneUid,
+        name: "Phone Test User",
+        phone: "9999900001",
+        location: { street: "MG Road", city: "Bengaluru", state: "Karnataka", pincode: "560001", lat: 12.9716, lng: 77.5946 },
+        stats: { loyalty_points: 0, total_earned: 0, total_redeemed: 0, total_scans: 0 },
+        created_at: new Date(),
+        updated_at: new Date(),
+    });
+    await db.collection("users").doc(testPhoneUid).set({
+        uid: testPhoneUid, role: "user", email_verified: false, created_at: new Date()
+    });
+    console.log(`✔  customer_profiles/${testPhoneUid} (phone test user)`);
+
+    // 7. Test seller Auth user (maps to seller_001 — Cafe Brew House)
     let sellerUid = "seller_001"; // use fixed ID so seller_profiles doc matches
     try {
         await auth.createUser({

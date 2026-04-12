@@ -93,3 +93,16 @@ export const reauthenticateSchema = z.object({
 export const validateCitySchema = z.object({
     city: z.string().min(1, "city required"),
 });
+
+export const sendOTPSchema = z.object({
+    phone: z
+        .string()
+        .regex(/^\d{10}$/, "phone must be a 10-digit Indian mobile number (no country code)"),
+});
+
+export const verifyOTPSchema = z.object({
+    phone: z
+        .string()
+        .regex(/^\d{10}$/, "phone must be a 10-digit Indian mobile number (no country code)"),
+    otp: z.string().length(6, "OTP must be exactly 6 digits"),
+});

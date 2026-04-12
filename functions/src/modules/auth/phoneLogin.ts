@@ -59,6 +59,8 @@ export const phoneLoginHandler = async (req: Request, res: Response, next: NextF
                 const profileRef = db.collection("customer_profiles").doc(uid);
                 const profileSnap = await profileRef.get();
 
+                const isNewUser = !profileSnap.exists;
+
                 if (!profileSnap.exists) {
                     await profileRef.set({
                         user_id: uid,
@@ -110,7 +112,7 @@ export const phoneLoginHandler = async (req: Request, res: Response, next: NextF
                 // ---------------------------------------------
                 // 4️⃣ DONE
                 // ---------------------------------------------
-                return sendSuccess(res, { message: "Phone login successful" }, HttpStatus.OK);
+                return sendSuccess(res, { message: "Phone login successful", is_new_user: isNewUser }, HttpStatus.OK);
 
     } catch (err) {
         next(err);

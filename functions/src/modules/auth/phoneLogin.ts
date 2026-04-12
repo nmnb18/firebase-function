@@ -39,6 +39,7 @@ export const phoneLoginHandler = async (req: Request, res: Response, next: NextF
                         name,
                         email,
                         phone,
+                        auth_method: "phone",
                         createdAt: now,
                         updatedAt: now,
                         lastLoginAt: now,
@@ -48,6 +49,7 @@ export const phoneLoginHandler = async (req: Request, res: Response, next: NextF
                         phone,
                         ...(email && { email }),
                         ...(name && { name }),
+                        auth_method: "phone",
                         updatedAt: now,
                         lastLoginAt: now,
                     });
@@ -64,6 +66,7 @@ export const phoneLoginHandler = async (req: Request, res: Response, next: NextF
                 if (!profileSnap.exists) {
                     await profileRef.set({
                         user_id: uid,
+                        auth_method: "phone",
 
                         account: {
                             name,
@@ -96,7 +99,12 @@ export const phoneLoginHandler = async (req: Request, res: Response, next: NextF
                     const updates: any = {
                         last_active: now,
                         updated_at: now,
+                        auth_method: "phone",
                     };
+
+                    // Sync name and email from Firebase Auth on every login
+                    if (name) updates["account.name"] = name;
+                    if (email) updates["account.email"] = email;
 
                     if (latitude && longitude) {
                         updates.location = {

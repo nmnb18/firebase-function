@@ -26,7 +26,7 @@ export const registerUserHandler = async (req: Request, res: Response, next: Nex
 
             const {
                 name,
-                phone,
+                phone: rawPhone,
                 email,
                 password,
                 street,
@@ -37,6 +37,14 @@ export const registerUserHandler = async (req: Request, res: Response, next: Nex
                 lat,
                 lng,
             } = data;
+
+            // Normalize phone to E.164 format (+91XXXXXXXXXX)
+            const digits = rawPhone.replace(/\D/g, "");
+            const phone = digits.length === 10
+                ? `+91${digits}`
+                : digits.length === 12 && digits.startsWith("91")
+                    ? `+${digits}`
+                    : rawPhone;
 
             // ---------------------------------------------
             // VALIDATION
@@ -93,6 +101,7 @@ export const registerUserHandler = async (req: Request, res: Response, next: Nex
                 name,
                 email,
                 phone,
+                auth_method: "email",
                 email_verified: false,
                 email_verification_token: verificationToken,
                 email_verification_expires: tokenExpiry,
@@ -105,6 +114,7 @@ export const registerUserHandler = async (req: Request, res: Response, next: Nex
             // ---------------------------------------------
             const customerProfile = {
                 user_id: user.uid,
+                auth_method: "email",
 
                 account: {
                     name,

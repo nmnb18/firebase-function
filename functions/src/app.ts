@@ -6,7 +6,7 @@ import { correlationMiddleware } from "./middleware/correlation";
 import { sanitizePIIMiddleware } from "./middleware/sanitize-pii";
 import { errorHandlerMiddleware } from "./middleware/error-handler";
 import { validateBody, validateQuery } from "./middleware/validate";
-import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit, clientLogRateLimit } from "./middleware/rate-limit";
+import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit, clientLogRateLimit, otpRateLimit } from "./middleware/rate-limit";
 
 // Validation schemas
 import {
@@ -20,6 +20,8 @@ import {
     confirmPasswordResetSchema,
     reauthenticateSchema,
     validateCitySchema,
+    sendOTPSchema,
+    verifyOTPSchema,
 } from "./validation/auth.schemas";
 import {
     updateUserProfileSchema,
@@ -72,6 +74,9 @@ import { loginUserHandler } from "./modules/auth/loginUser";
 import { logoutHandler } from "./modules/auth/logout";
 import { phoneLoginHandler } from "./modules/auth/phoneLogin";
 import { reauthenticateHandler } from "./modules/auth/reauthenticate";
+import { sendOTPHandler } from "./modules/auth/sendOTP";
+import { verifyOTPHandler } from "./modules/auth/verifyOTP";
+import { getConfigHandler } from "./modules/auth/getConfig";
 import { refreshTokenHandler } from "./modules/auth/refreshToken";
 import { registerSellerHandler } from "./modules/auth/registerSeller";
 import { registerUserHandler } from "./modules/auth/registerUser";
@@ -177,6 +182,11 @@ router.delete("/deleteUser", deleteUserHandler);
 router.delete("/deleteSellerAccount", deleteSellerAccountHandler);
 router.get("/verifyEmail", verifyEmailHandler);
 router.post("/validateCity", validateBody(validateCitySchema), validateCityHandler);
+// MSG91 OTP endpoints (used when app_config/mobile.otp_provider = 'msg91')
+router.post("/sendOTP", otpRateLimit, validateBody(sendOTPSchema), sendOTPHandler);
+router.post("/verifyOTP", otpRateLimit, validateBody(verifyOTPSchema), verifyOTPHandler);
+// Runtime app config (public)
+router.get("/getConfig", getConfigHandler);
 
 // User
 router.get("/getUserDetails", getUserDetailsHandler);

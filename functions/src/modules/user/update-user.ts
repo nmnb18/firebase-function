@@ -57,8 +57,24 @@ export const updateUserProfileHandler = async (req: Request, res: Response, next
                     };
                 }
 
-                // Update DB
-                await userRef.update(updatePayload);
+                // Update DB — atomically sync account fields to users collection too
+                if (section === "account") {
+                    const batch = db.batch();
+                    batch.update(userRef, updatePayload);
+
+                    // Keep users/{uid} in sync with customer_profiles account fields
+                    const usersRef = db.collection("users").doc(userId);
+                    const usersSyncPayload: Record<string, any> = {
+                        updatedAt: adminRef.firestore.FieldValue.serverTimestamp(),
+                    };
+                    if (data.name) usersSyncPayload.name = data.name;
+                    if (data.phone) usersSyncPayload.phone = data.phone;
+                    batch.update(usersRef, usersSyncPayload);
+
+                    await batch.commit();
+                } else {
+                    await userRef.update(updatePayload);
+                }
 
                 // Get updated document
                 const updatedDoc = await userRef.get();

@@ -91,9 +91,15 @@ export const updateSellerProfileHandler = async (req: Request, res: Response, ne
             };
 
             // Handle rewards section specially for offer ID generation
+            // Handle payment section — UPI VPA registration
             if (section === "payment") {
-                // Payment VPA is read-only — managed only through seller onboarding/setup
-                return sendError(res, ErrorCodes.FORBIDDEN, "Payment VPA cannot be updated through this endpoint. Manage VPA in profile setup.", HttpStatus.FORBIDDEN);
+                const { upi_vpa } = data;
+                if (!upi_vpa || typeof upi_vpa !== "string" || !upi_vpa.trim().includes("@")) {
+                    return sendError(res, ErrorCodes.INVALID_INPUT, "Invalid UPI VPA — must contain '@'", HttpStatus.BAD_REQUEST);
+                }
+                const normalizedVpa = upi_vpa.trim().toLowerCase();
+                // Store as an array to support multiple VPAs per seller
+                updatePayload["rewards.upi_ids"] = adminRef.firestore.FieldValue.arrayUnion(normalizedVpa);
             }
             // Handle rewards section specially for offer ID generation
             else if (section === "rewards") {

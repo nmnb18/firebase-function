@@ -60,6 +60,11 @@ export const verifyPaymentHandler = async (req: Request, res: Response, next: Ne
                 }
 
                 const paymentData = paymentDoc.data();
+
+                // Idempotency: reject if already processed to prevent double subscription activation
+                if (paymentData?.status !== "created") {
+                    return sendError(res, ErrorCodes.ORDER_ALREADY_PROCESSED, "Payment already verified", HttpStatus.CONFLICT);
+                }
                 const couponUsed = paymentData?.coupon;
                 const amountPaid = paymentData?.amount ? paymentData.amount / 100 : plan.price; // Convert from paise
 

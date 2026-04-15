@@ -67,3 +67,13 @@ export const clientLogRateLimit = rateLimit({
     message: rateLimitMessage("log ingestion"),
     skip: () => process.env.NODE_ENV === "test" || !!process.env.FUNCTIONS_EMULATOR,
 });
+
+/** 30 lookups per IP per minute — prevents UPI VPA enumeration */
+export const vpaLookupRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: rateLimitMessage("VPA lookup"),
+    skip: () => process.env.NODE_ENV === "test" || !!process.env.FUNCTIONS_EMULATOR,
+});

@@ -63,7 +63,9 @@ export async function updateSellerStats(
 }
 
 /**
- * Update or create points record for user-seller pair
+ * Update or create points record for user-seller pair.
+ * Uses a Firestore transaction to atomically read + increment points,
+ * eliminating the race condition between set and get under concurrent payments.
  */
 export async function updatePointsCollection(
     userId: string,
@@ -72,15 +74,20 @@ export async function updatePointsCollection(
 ): Promise<number> {
     const docId = `${userId}_${sellerId}`;
     const ref = db.collection("points").doc(docId);
-    await ref.set({
-        user_id: userId,
-        seller_id: sellerId,
-        points: adminRef.firestore.FieldValue.increment(pointsEarned),
-        last_updated: new Date(),
-        created_at: new Date(),
-    }, { merge: true });
-    const updated = await ref.get();
-    return (updated.data()?.points as number) || pointsEarned;
+    return db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const existing = snap.data();
+        const newPoints = (existing?.points || 0) + pointsEarned;
+        tx.set(ref, {
+            user_id: userId,
+            seller_id: sellerId,
+            points: newPoints,
+            last_updated: adminRef.firestore.FieldValue.serverTimestamp(),
+            // Preserve original created_at; only set when doc is new
+            ...(existing?.created_at ? {} : { created_at: adminRef.firestore.FieldValue.serverTimestamp() }),
+        }, { merge: true });
+        return newPoints;
+    });
 }
 
 /**
@@ -142,11 +149,17 @@ export async function sendPointsEarnedNotifications(
         db.collection("push_tokens").where("user_id", "==", sellerId).get(),
     ]);
 
-    const userTokens = userTokenSnap.docs.map((d) => d.data().token);
-    const sellerTokens = sellerTokenSnap.docs.map((d) => d.data().token);
+    // Build token->docRef maps for failed_count tracking
+    const userTokenMap = new Map<string, FirebaseFirestore.DocumentReference>();
+    userTokenSnap.docs.forEach((d) => userTokenMap.set(d.data().token, d.ref));
+    const sellerTokenMap = new Map<string, FirebaseFirestore.DocumentReference>();
+    sellerTokenSnap.docs.forEach((d) => sellerTokenMap.set(d.data().token, d.ref));
 
-    // Send push notifications (non-blocking, errors logged but not thrown)
-    await Promise.all([
+    const userTokens = [...userTokenMap.keys()];
+    const sellerTokens = [...sellerTokenMap.keys()];
+
+    // Send push notifications, collect invalid tokens for cleanup
+    const [userResult, sellerResult] = await Promise.allSettled([
         userTokens.length > 0
             ? pushService.sendToUser(
                   userTokens,
@@ -158,8 +171,8 @@ export async function sendPointsEarnedNotifications(
                       params: { sellerId, points: pointsEarned },
                   },
                   NotificationChannel.ORDERS
-              ).catch((err) => console.error("User push failed:", err))
-            : Promise.resolve(),
+              )
+            : Promise.resolve(null),
         sellerTokens.length > 0
             ? pushService.sendToUser(
                   sellerTokens,
@@ -170,9 +183,34 @@ export async function sendPointsEarnedNotifications(
                       screen: "/(drawer)/redemptions",
                   },
                   NotificationChannel.ORDERS
-              ).catch((err) => console.error("Seller push failed:", err))
-            : Promise.resolve(),
+              )
+            : Promise.resolve(null),
     ]);
+
+    if (userResult.status === "rejected") console.error("User push failed:", userResult.reason);
+    if (sellerResult.status === "rejected") console.error("Seller push failed:", sellerResult.reason);
+
+    // Increment failed_count for DeviceNotRegistered tokens (non-blocking)
+    const invalidRefs: FirebaseFirestore.DocumentReference[] = [];
+    if (userResult.status === "fulfilled" && userResult.value?.invalidTokens?.length) {
+        for (const tok of userResult.value.invalidTokens) {
+            const ref = userTokenMap.get(tok);
+            if (ref) invalidRefs.push(ref);
+        }
+    }
+    if (sellerResult.status === "fulfilled" && sellerResult.value?.invalidTokens?.length) {
+        for (const tok of sellerResult.value.invalidTokens) {
+            const ref = sellerTokenMap.get(tok);
+            if (ref) invalidRefs.push(ref);
+        }
+    }
+    if (invalidRefs.length > 0) {
+        const failBatch = db.batch();
+        for (const ref of invalidRefs) {
+            failBatch.update(ref, { failed_count: adminRef.firestore.FieldValue.increment(1) });
+        }
+        failBatch.commit().catch((err) => console.error("Failed to update push token failed_count:", err));
+    }
 }
 
 /**

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { db } from "../../config/firebase";
+import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
 
@@ -69,7 +69,7 @@ export const assignTodayOfferHandler = async (req: Request, res: Response, next:
                 date: today,
                 status: 'ASSIGNED',
                 redeemed: false,
-                created_at: new Date(),
+                created_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 shop_name: seller?.business?.shop_name || "Unknown Store",
                 seller_logo: seller?.media?.logo_url || "",
                 customer_name: user?.account.name,

@@ -207,11 +207,28 @@ service cloud.firestore {
       allow write: if false; // Only admin/Cloud Functions
     }
     
-    // City enquiries — users can create enquiries for unlisted cities
+    // Error logs — backend-only access; no client reads or writes
+    // Admin dashboard queries via Cloud Functions (bypasses rules via Admin SDK)
+    match /error_logs/{docId} {
+      allow read, write: if false;
+    }
+    
+    // City enquiries — aggregate counter per city (admin reads via Cloud Functions)
     match /city_enquiries/{cityKey} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update, delete: if false; // Only admin
+
+      // Per-user enquiry sub-docs — security data, admin SDK only
+      match /enquiries/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    // City access log — IP + user-agent telemetry for security monitoring
+    // Written only by Cloud Functions (Admin SDK). No client access.
+    match /city_access_log/{docId} {
+      allow read, write: if false;
     }
     
     // ════════════════════════════════════════════════════════════════

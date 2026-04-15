@@ -6,7 +6,7 @@ import { correlationMiddleware } from "./middleware/correlation";
 import { sanitizePIIMiddleware } from "./middleware/sanitize-pii";
 import { errorHandlerMiddleware } from "./middleware/error-handler";
 import { validateBody, validateQuery } from "./middleware/validate";
-import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit, clientLogRateLimit, otpRateLimit } from "./middleware/rate-limit";
+import { loginRateLimit, upiOrderRateLimit, qrScanRateLimit, clientLogRateLimit, otpRateLimit, vpaLookupRateLimit } from "./middleware/rate-limit";
 
 // Validation schemas
 import {
@@ -149,7 +149,23 @@ import { confirmUPIPaymentAndAwardPointsHandler } from "./modules/upi/confirm-up
 import { razorpayWebhookHandler } from "./modules/upi/razorpay-webhook";
 
 const app = express();
-app.use(cors({ origin: true }));
+
+// CORS: allow requests with no Origin (mobile apps) and whitelisted web origins.
+// Set CORS_ALLOWED_ORIGINS env var to a comma-separated list of allowed web origins.
+// e.g. CORS_ALLOWED_ORIGINS=https://dashboard.grabbitt.in,https://admin.grabbitt.in
+const CORS_ORIGINS = process.env.CORS_ALLOWED_ORIGINS
+    ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+    : [];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // No Origin header = mobile app / server-to-server call — always allow
+        if (!origin) return callback(null, true);
+        if (CORS_ORIGINS.includes(origin)) return callback(null, true);
+        callback(new Error(`CORS policy: origin '${origin}' is not allowed`));
+    },
+    credentials: true,
+}));
 app.use(express.json({
     limit: "10mb",
     // Capture the raw body buffer so the Razorpay webhook handler can
@@ -237,7 +253,7 @@ router.post("/verifyPayment", validateBody(verifyPaymentSchema), verifyPaymentHa
 router.post("/verifyIAPPurchase", validateBody(verifyIAPPurchaseSchema), verifyIAPPurchaseHandler);
 
 // UPI
-router.get("/getSellerByVPA", getSellerByVPAHandler);
+router.get("/getSellerByVPA", vpaLookupRateLimit, getSellerByVPAHandler);
 router.post("/createUPIPaymentOrder", upiOrderRateLimit, validateBody(createUPIPaymentOrderSchema), createUPIPaymentOrderHandler);
 router.post("/confirmUPIPaymentAndAwardPoints", validateBody(confirmUPIPaymentSchema), confirmUPIPaymentAndAwardPointsHandler);
 // razorpayWebhook: no body validation — Razorpay sends its own payload format; auth is HMAC-SHA256 signature

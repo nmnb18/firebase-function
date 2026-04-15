@@ -64,11 +64,14 @@ export const getNearbySellersHandler = async (req: Request, res: Response, next:
                 const today = new Date().toISOString().slice(0, 10);
 
                 // Parallel: Get all sellers + today's offers
+                // .limit(500) guards against unbounded collection reads — replace with
+                // geohash/zone-based pre-filtering when seller count exceeds this threshold
                 const [sellerDocs, todayOffersSnap] = await Promise.all([
-                    db.collection("seller_profiles").get(),
+                    db.collection("seller_profiles").limit(500).get(),
                     db.collection("seller_daily_offers")
                         .where("date", "==", today)
                         .where("status", "==", "Active")
+                        .limit(500)
                         .get()
                 ]);
 

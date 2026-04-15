@@ -35,6 +35,8 @@ export const registerPushTokenHandler = async (req: Request, res: Response, next
                     platform,
                     device_name,
                     device_model,
+                    failed_count: 0,
+                    last_used_at: adminRef.firestore.FieldValue.serverTimestamp(),
                     created_at: adminRef.firestore.FieldValue.serverTimestamp(),
                     updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
                 });

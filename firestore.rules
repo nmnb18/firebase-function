@@ -22,6 +22,11 @@ service cloud.firestore {
     function isSellerOwner(sellerId) {
       return isAuthenticated() && request.auth.uid == sellerId;
     }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
     
     // ════════════════════════════════════════════════════════════════
     // USER AUTHENTICATION & PROFILES
@@ -29,26 +34,29 @@ service cloud.firestore {
     
     // Core user records — read own only, writes via Cloud Functions only
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow write: if false; // Only Cloud Functions
+      allow read: if isOwner(userId) || isAdmin();
+      allow update: if isAdmin();
+      allow create, delete: if false; // Only Cloud Functions
     }
     
     // Customer profiles — read own data, sellers can read for transactions
     match /customer_profiles/{userId} {
-      allow read: if isOwner(userId) || isSeller();
+      allow read: if isOwner(userId) || isSeller() || isAdmin();
       allow write: if false; // Only Cloud Functions
     }
     
     // Seller profiles — public read for discovery, admin write only
     match /seller_profiles/{sellerId} {
       allow read: if true; // Public store listing/discovery
-      allow write: if false; // Only Cloud Functions
+      allow update: if isAdmin();
+      allow create, delete: if false; // Only Cloud Functions
     }
     
     // Seller subscriptions — seller can read own
     match /seller_subscriptions/{sellerId} {
-      allow read: if isSellerOwner(sellerId);
-      allow write: if false;
+      allow read: if isSellerOwner(sellerId) || isAdmin();
+      allow update: if isAdmin();
+      allow create, delete: if false;
     }
     
     // ════════════════════════════════════════════════════════════════
@@ -57,33 +65,37 @@ service cloud.firestore {
     
     // Points collection — read own points only
     match /points/{docId} {
-      allow read: if isAuthenticated() && 
-                     (resource.data.user_id == request.auth.uid ||
-                      resource.data.seller_id == request.auth.uid);
+      allow read: if isAdmin() ||
+                     (isAuthenticated() &&
+                      (resource.data.user_id == request.auth.uid ||
+                       resource.data.seller_id == request.auth.uid));
       allow write: if false; // Only Cloud Functions
     }
     
     // Points hold — read own only (used during redemption)
-    match /points_hold/{docId} {
-      allow read: if isAuthenticated() &&
-                     (resource.data.user_id == request.auth.uid ||
-                      resource.data.seller_id == request.auth.uid);
+    match /point_holds/{docId} {
+      allow read: if isAdmin() ||
+                     (isAuthenticated() &&
+                      (resource.data.user_id == request.auth.uid ||
+                       resource.data.seller_id == request.auth.uid));
       allow write: if false;
     }
     
     // Transaction history — read own transactions
     match /transactions/{txId} {
-      allow read: if isAuthenticated() &&
-                     (resource.data.user_id == request.auth.uid ||
-                      resource.data.seller_id == request.auth.uid);
+      allow read: if isAdmin() ||
+                     (isAuthenticated() &&
+                      (resource.data.user_id == request.auth.uid ||
+                       resource.data.seller_id == request.auth.uid));
       allow write: if false; // Only Cloud Functions
     }
     
     // Daily scans audit log — read own only
     match /daily_scans/{scanId} {
-      allow read: if isAuthenticated() &&
-                     (resource.data.user_id == request.auth.uid ||
-                      resource.data.seller_id == request.auth.uid);
+      allow read: if isAdmin() ||
+                     (isAuthenticated() &&
+                      (resource.data.user_id == request.auth.uid ||
+                       resource.data.seller_id == request.auth.uid));
       allow write: if false;
     }
     
@@ -93,27 +105,35 @@ service cloud.firestore {
     
     // Subscription payments — read own only
     match /payments/{paymentId} {
-      allow read: if isAuthenticated() && resource.data.seller_id == request.auth.uid;
-      allow write: if false;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.seller_id == request.auth.uid);
+      allow update: if isAdmin();
+      allow create, delete: if false;
     }
     
     // UPI payment orders — read own only
     match /upi_payment_orders/{orderId} {
-      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
+      allow write: if false; // Only Cloud Functions
+    }
+
+    // User payments (QR/UPI scan payments) — admin read all, user read own
+    match /user_payments/{paymentId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
       allow write: if false; // Only Cloud Functions
     }
     
     // Coupons — read active coupons only
     match /coupons/{couponId} {
-      allow read: if isAuthenticated() && resource.data.status == 'active';
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.status == 'active');
       allow write: if false;
     }
     
     // Coupon usage — read own usage
     match /coupon_usage/{usageId} {
-      allow read: if isAuthenticated() &&
-                     (resource.data.user_id == request.auth.uid ||
-                      resource.data.seller_id == request.auth.uid);
+      allow read: if isAdmin() ||
+                     (isAuthenticated() &&
+                      (resource.data.user_id == request.auth.uid ||
+                       resource.data.seller_id == request.auth.uid));
       allow write: if false;
     }
     
@@ -123,23 +143,25 @@ service cloud.firestore {
     
     // Redemption requests — read own redemptions
     match /redemptions/{redemptionId} {
-      allow read: if isAuthenticated() &&
-                     (resource.data.user_id == request.auth.uid ||
-                      resource.data.seller_id == request.auth.uid);
+      allow read: if isAdmin() ||
+                     (isAuthenticated() &&
+                      (resource.data.user_id == request.auth.uid ||
+                       resource.data.seller_id == request.auth.uid));
       allow write: if false; // Only Cloud Functions
     }
     
     // Today's offer claims — read own claims
     match /today_offer_claims/{claimId} {
-      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.user_id == request.auth.uid);
       allow write: if false;
     }
     
     // Offer redemptions — read own
     match /offer_redemptions/{redemptionId} {
-      allow read: if isAuthenticated() &&
-                     (resource.data.user_id == request.auth.uid ||
-                      resource.data.seller_id == request.auth.uid);
+      allow read: if isAdmin() ||
+                     (isAuthenticated() &&
+                      (resource.data.user_id == request.auth.uid ||
+                       resource.data.seller_id == request.auth.uid));
       allow write: if false;
     }
     
@@ -154,14 +176,15 @@ service cloud.firestore {
     
     // User QR data — read own only
     match /user_qr/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow write: if false;
     }
     
     // QR codes (seller-generated) — read own only
     match /qr_codes/{qrId} {
-      allow read: if isAuthenticated() && resource.data.seller_id == request.auth.uid;
-      allow write: if false;
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.seller_id == request.auth.uid);
+      allow update, delete: if isAdmin();
+      allow create: if false;
     }
     
     // ════════════════════════════════════════════════════════════════
@@ -181,6 +204,12 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
     }
     
+    // Scans audit log — admin read only
+    match /scans/{scanId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // ════════════════════════════════════════════════════════════════
     // SELLER-SPECIFIC COLLECTIONS
     // ════════════════════════════════════════════════════════════════
@@ -188,7 +217,7 @@ service cloud.firestore {
     // Seller daily offers — public read for discovery
     match /seller_daily_offers/{offerId} {
       allow read: if true; // Public (for "Today's Offers" feature)
-      allow write: if false;
+      allow write: if isAdmin(); // Admin can create/update/delete offers
     }
     
     // Subscription history subcollection — seller reads own
@@ -207,10 +236,10 @@ service cloud.firestore {
       allow write: if false; // Only admin/Cloud Functions
     }
     
-    // Error logs — backend-only access; no client reads or writes
-    // Admin dashboard queries via Cloud Functions (bypasses rules via Admin SDK)
+    // Error logs — admin read; no client writes
     match /error_logs/{docId} {
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
     
     // City enquiries — aggregate counter per city (admin reads via Cloud Functions)

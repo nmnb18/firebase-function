@@ -24,7 +24,7 @@ export const getPointsBalanceHandler = async (req: Request, res: Response, next:
                     db.collection("points")
                         .where("user_id", "==", currentUser.uid)
                         .get(),
-                    db.collection("points_hold")
+                    db.collection("point_holds")
                         .where("user_id", "==", currentUser.uid)
                         .get(),
                     db.collection("redemptions")

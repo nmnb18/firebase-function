@@ -53,7 +53,7 @@ export const getTransactionsHandler = async (req: Request, res: Response, next: 
                         id: doc.id,
                         seller_id: data.seller_id,
                         seller_name: data.seller_name || "Unknown Store",
-                        points: data.points || 0,
+                        points: data.points_earned || 0,
                         type: data.transaction_type || 'earn',
                         description: data.description || '',
                         amount: data.amount || 0,

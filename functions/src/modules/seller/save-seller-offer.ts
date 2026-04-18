@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { db } from "../../config/firebase";
+import { db, adminRef } from "../../config/firebase";
 import { authenticateUser } from "../../middleware/auth";
 import { createCache } from "../../utils/cache";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
@@ -75,8 +75,8 @@ export const saveSellerOfferHandler = async (req: Request, res: Response, next: 
                             date: d,
                             offers: formattedOffers,
                             status: "Pending",
-                            updated_at: new Date(),
-                            created_at: new Date(),
+                            updated_at: adminRef.firestore.FieldValue.serverTimestamp(),
+                            created_at: adminRef.firestore.FieldValue.serverTimestamp(),
                         },
                         { merge: true }
                     );

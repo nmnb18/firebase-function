@@ -38,7 +38,6 @@ export const getSellerOffersHandler = async (req: Request, res: Response, next: 
                         .where("seller_id", "==", seller_id)
                         .where("date", "==", today)
                         .where("status", "==", 'Active')
-                        .orderBy("date", "desc")
                         .get(),
                     db.collection("seller_daily_offers")
                         .where("seller_id", "==", seller_id)

@@ -39,18 +39,14 @@ export async function updateSellerStats(
     const currentYear = now.getFullYear();
     const monthlyScanKey = `stats.monthly_scans.${currentYear}.${currentMonthKey}`;
 
-    const sellerDoc = await sellerRef.get();
-    const sellerData = sellerDoc.data();
-
+    // Use FieldValue.increment for all numeric stats to avoid read-before-write race conditions.
+    // Firestore supports dotted-path notation for nested fields, so monthly_scans[year][month]
+    // can be atomically incremented without reading the document first.
     const updateData: any = {
         "stats.total_scans": adminRef.firestore.FieldValue.increment(1),
         "stats.total_points_distributed": adminRef.firestore.FieldValue.increment(pointsEarned),
+        [monthlyScanKey]: adminRef.firestore.FieldValue.increment(1),
     };
-
-    const currentMonthlyScans = sellerData?.stats?.monthly_scans || {};
-    const currentYearScans = currentMonthlyScans[currentYear] || {};
-    const currentMonthCount = currentYearScans[currentMonthKey] || 0;
-    updateData[monthlyScanKey] = currentMonthCount + 1;
 
     if (isNewCustomer) {
         updateData["stats.active_customers"] = adminRef.firestore.FieldValue.increment(1);
@@ -299,12 +295,18 @@ export async function createPointsEarningTransaction(
         seller_id: data.sellerId,
         seller_name: data.sellerName,
         type: data.transactionType,
+        // transaction_type is the legacy field used by dashboard queries and client filtering.
+        // All earning transactions (QR + UPI) share "earn" so seller-stats queries find both.
+        transaction_type: "earn",
         amount: data.amount,
         points_earned: data.pointsEarned,
         base_points: data.basePoints,
         bonus_points: data.bonusPoints,
         description: data.description,
         created_at: now,
+        // timestamp mirrors created_at; kept for backward-compat with existing indexes and
+        // any client code that orders by "timestamp". New queries should prefer "created_at".
+        timestamp: now,
     };
 
     if (data.customerName) {
@@ -312,9 +314,7 @@ export async function createPointsEarningTransaction(
     }
 
     if (data.transactionType === "qr_scan") {
-        transactionData.transaction_type = "earn";
         transactionData.qr_type = "user";
-        transactionData.timestamp = adminRef.firestore.FieldValue.serverTimestamp();
     }
 
     if (data.razorpayOrderId) {
@@ -335,12 +335,9 @@ export async function createPointsEarningTransaction(
         "stats.updated_at": now,
     });
 
-    // 4. Update seller basic stats (monthly stats handled separately by updateSellerStats)
-    const sellerRef = db.collection("seller_profiles").doc(data.sellerId);
-    batch.update(sellerRef, {
-        "stats.total_scans": adminRef.firestore.FieldValue.increment(1),
-        "stats.total_points_distributed": adminRef.firestore.FieldValue.increment(data.pointsEarned),
-    });
+    // Seller stats (total_scans, total_points_distributed, monthly_scans) are incremented
+    // by updateSellerStats() which is called by every handler after this batch commits.
+    // Do NOT increment seller stats here — that would double-count every metric.
 
     await batch.commit();
 }

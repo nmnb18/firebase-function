@@ -77,26 +77,29 @@ export const createRedemptionHandler = async (req: Request, res: Response, next:
                 );
 
 
+                // Query active point holds OUTSIDE the transaction.
+                // Firestore transactions only support tx.get() on DocumentReferences,
+                // not on collection queries (.where). Reading holds outside is safe:
+                // the transaction itself atomically enforces the final balance check.
+                const existingHoldsSnap = await db
+                    .collection("point_holds")
+                    .where("user_id", "==", currentUser.uid)
+                    .where("seller_id", "==", seller_id)
+                    .where("status", "==", "reserved")
+                    .get();
+
+                let reservedPoints = 0;
+                existingHoldsSnap.forEach((doc) => {
+                    reservedPoints += doc.data().points || 0;
+                });
+
                 // 🔐 TRANSACTION (critical)
                 await db.runTransaction(async (tx) => {
-                    // 1️⃣ Read total points
+                    // 1️⃣ Read total points atomically
                     const pointsSnap = await tx.get(pointsRef);
                     const totalPoints = pointsSnap.data()?.points || 0;
 
-                    // 2️⃣ Calculate reserved points
-                    const holdsSnap = await tx.get(
-                        db
-                            .collection("point_holds")
-                            .where("user_id", "==", currentUser.uid)
-                            .where("seller_id", "==", seller_id)
-                            .where("status", "==", "reserved")
-                    );
-
-                    let reservedPoints = 0;
-                    holdsSnap.forEach((doc) => {
-                        reservedPoints += doc.data().points || 0;
-                    });
-
+                    // 2️⃣ Reserved points computed before transaction (see above)
                     const availablePoints = totalPoints - reservedPoints;
 
                     // ❌ Insufficient balance

@@ -12,18 +12,26 @@ export const getUserRedemptionsHandler = async (req: Request, res: Response, nex
                 const currentUser = await authenticateUser(req.headers.authorization);
                 // Get query parameters
                 const { seller_id } = req.query;
-                // const cacheKey = `user_redemptions:${currentUser.uid}_${seller_id || 'all'}`;
-                // const cached = cache.get<any>(cacheKey);
-                // if (cached) {
-                //     return res.status(200).json(cached);
-                // }
-                // Build base query - NO LIMIT
+                const { limit: limitParam, start_after } = req.query as Record<string, string>;
+                const pageSize = Math.min(parseInt(limitParam) || 20, 50);
+
                 let query: any = db.collection("redemptions")
                     .where("user_id", "==", currentUser.uid)
-                    .orderBy("created_at", "desc");
+                    .orderBy("created_at", "desc")
+                    .limit(pageSize);
+
                 if (seller_id) {
                     query = query.where("seller_id", "==", seller_id);
                 }
+
+                // Cursor-based pagination: pass the last doc's redemption_id as start_after
+                if (start_after) {
+                    const cursorDoc = await db.collection("redemptions").doc(start_after as string).get();
+                    if (cursorDoc.exists) {
+                        query = query.startAfter(cursorDoc);
+                    }
+                }
+
                 const snapshot = await query.get();
                 const redemptions = snapshot.docs.map((doc: any) => {
                     const data = doc.data();
@@ -61,9 +69,14 @@ export const getUserRedemptionsHandler = async (req: Request, res: Response, nex
                         .filter((r: { status: string; }) => r.status === 'pending')
                         .reduce((sum: any, r: { points: any; }) => sum + (r.points || 0), 0),
                 };
-                const responseData = { success: true, redemptions, count: redemptions.length, stats };
+                const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+                const next_cursor = snapshot.docs.length === pageSize
+                    ? (lastDoc?.data()?.redemption_id || lastDoc?.id)
+                    : null;
+
+                const responseData = { redemptions, count: redemptions.length, stats, next_cursor };
                 //cache.set(cacheKey, responseData, 30000);
-                return sendSuccess(res, { redemptions, count: redemptions.length, stats }, HttpStatus.OK);
+                return sendSuccess(res, responseData, HttpStatus.OK);
 
     } catch (error: any) {
         if (error.code === 9) { // FAILED_PRECONDITION error

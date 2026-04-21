@@ -66,7 +66,7 @@ export const registerUserHandler = async (req: Request, res: Response, next: Nex
             // ---------------------------------------------
             const emailExists = await auth.getUserByEmail(email).catch(() => null);
             if (emailExists) {
-                return sendError(res, ErrorCodes.ALREADY_EXISTS, "Email already exists", HttpStatus.BAD_REQUEST);
+                return sendError(res, ErrorCodes.EMAIL_ALREADY_REGISTERED, "This email is already registered. Please login instead.", HttpStatus.CONFLICT);
             }
 
             const phoneQuery = await db
@@ -76,7 +76,7 @@ export const registerUserHandler = async (req: Request, res: Response, next: Nex
                 .get();
 
             if (!phoneQuery.empty) {
-                return sendError(res, ErrorCodes.ALREADY_EXISTS, "Phone already in use", HttpStatus.BAD_REQUEST);
+                return sendError(res, ErrorCodes.PHONE_ALREADY_REGISTERED, "This phone number is already registered. Please login instead.", HttpStatus.CONFLICT);
             }
 
             // ---------------------------------------------
@@ -185,7 +185,7 @@ export const registerUserHandler = async (req: Request, res: Response, next: Nex
 
     } catch (error: any) {
         if (error.code === "auth/email-already-exists") {
-            return sendError(res, ErrorCodes.ALREADY_EXISTS, "Email already exists", HttpStatus.BAD_REQUEST);
+            return sendError(res, ErrorCodes.EMAIL_ALREADY_REGISTERED, "This email is already registered. Please login instead.", HttpStatus.CONFLICT);
         }
         next(error);
     }

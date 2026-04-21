@@ -19,10 +19,17 @@ export const getTodayOfferStatusHandler = async (req: Request, res: Response, ne
                 .doc(claimId)
                 .get();
 
+            const snapData = snap.data();
             return sendSuccess(res, {
                 claimed: snap.exists,
-                status: snap.exists ? snap.data()?.status : null,
-                redeem_code: snap.exists ? snap.data()?.redeem_code : null
+                status: snap.exists ? snapData?.status : null,
+                redeem_code: snap.exists ? snapData?.redeem_code : null,
+                // Return offer details so UI can restore the revealed state for ASSIGNED offers
+                offer: snap.exists && snapData?.status === 'ASSIGNED' ? {
+                    title: snapData?.title,
+                    min_spend: snapData?.min_spend,
+                    terms: snapData?.terms,
+                } : null,
             }, HttpStatus.OK);
     } catch (err) {
         next(err);

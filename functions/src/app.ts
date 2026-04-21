@@ -76,6 +76,7 @@ import { phoneLoginHandler } from "./modules/auth/phoneLogin";
 import { reauthenticateHandler } from "./modules/auth/reauthenticate";
 import { sendOTPHandler } from "./modules/auth/sendOTP";
 import { verifyOTPHandler } from "./modules/auth/verifyOTP";
+import { checkPhoneHandler } from "./modules/auth/checkPhone";
 import { getConfigHandler } from "./modules/auth/getConfig";
 import { refreshTokenHandler } from "./modules/auth/refreshToken";
 import { registerSellerHandler } from "./modules/auth/registerSeller";
@@ -201,6 +202,8 @@ router.post("/validateCity", validateBody(validateCitySchema), validateCityHandl
 // MSG91 OTP endpoints (used when app_config/mobile.otp_provider = 'msg91')
 router.post("/sendOTP", otpRateLimit, validateBody(sendOTPSchema), sendOTPHandler);
 router.post("/verifyOTP", otpRateLimit, validateBody(verifyOTPSchema), verifyOTPHandler);
+// Phone existence check — used by Firebase OTP provider before triggering signInWithPhoneNumber
+router.get("/checkPhone", otpRateLimit, checkPhoneHandler);
 // Runtime app config (public)
 router.get("/getConfig", getConfigHandler);
 

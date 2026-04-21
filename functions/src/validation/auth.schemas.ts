@@ -98,6 +98,7 @@ export const sendOTPSchema = z.object({
     phone: z
         .string()
         .regex(/^\d{10}$/, "phone must be a 10-digit Indian mobile number (no country code)"),
+    purpose: z.enum(["register", "login"]).optional(),
 });
 
 export const verifyOTPSchema = z.object({

@@ -6,10 +6,10 @@ import { sendSuccess } from "../../utils/response";
  * GET /getConfig (public — no auth required)
  *
  * Returns runtime configuration used by the mobile apps.
- * Currently: otp_provider ('firebase' | 'msg91').
+ *   otp_provider       — 'firebase' | 'msg91'
+ *   geocoding_provider — 'google' | 'here'
  *
  * Firestore doc: app_config/mobile
- * Example: { otp_provider: "firebase" }
  */
 export const getConfigHandler = async (
   _req: Request,
@@ -20,7 +20,8 @@ export const getConfigHandler = async (
     const snap = await db.collection("app_config").doc("mobile").get();
     const data = snap.data();
     const otp_provider: string = data?.otp_provider ?? "firebase";
-    return sendSuccess(res, { otp_provider });
+    const geocoding_provider: string = data?.geocoding_provider ?? "google";
+    return sendSuccess(res, { otp_provider, geocoding_provider });
   } catch (err) {
     next(err);
   }

@@ -55,6 +55,21 @@ class InMemoryCache {
     }
 
     /**
+     * Get cached value, or fetch + cache it if missing/expired.
+     * Callers never need to manage get/set manually:
+     *
+     *   const cities = await globalCache.getOrSet("city_config", fetchFn, 5 * 60 * 1000);
+     */
+    async getOrSet<T>(key: string, fetcher: () => Promise<T>, ttlMs: number = 60000): Promise<T> {
+        const cached = this.get<T>(key);
+        if (cached !== null) return cached;
+
+        const value = await fetcher();
+        this.set(key, value, ttlMs);
+        return value;
+    }
+
+    /**
      * Delete key from cache
      */
     delete(key: string): boolean {

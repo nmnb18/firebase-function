@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import { adminRef, db } from "../../config/firebase";
 import { sendSuccess, sendError, ErrorCodes, HttpStatus } from "../../utils/response";
+import { globalCache } from "../../utils/cache";
+
+const CITY_CONFIG_CACHE_KEY = "app_settings:city_config";
+const CITY_CONFIG_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Extract real client IP. Cloud Functions sit behind a load balancer,
@@ -81,18 +85,20 @@ export const validateCityHandler = async (req: Request, res: Response, next: Nex
 
         const cityKey = city.toLowerCase().trim();
 
-        const configSnap = await db
-            .collection("app_settings")
-            .doc("city_config")
-            .get();
-
-        if (!configSnap.exists) {
+        let enabled_cities: string[];
+        try {
+            enabled_cities = await globalCache.getOrSet(
+                CITY_CONFIG_CACHE_KEY,
+                async () => {
+                    const snap = await db.collection("app_settings").doc("city_config").get();
+                    if (!snap.exists) throw new Error("City config missing");
+                    return (snap.data()!.enabled_cities ?? []) as string[];
+                },
+                CITY_CONFIG_TTL_MS
+            );
+        } catch {
             return sendError(res, ErrorCodes.INTERNAL_ERROR, "City config missing", HttpStatus.INTERNAL_SERVER_ERROR);
         }
-
-        const {
-            enabled_cities = [],
-        } = configSnap.data()!;
 
         if (enabled_cities.includes(cityKey)) {
             // Log for security telemetry even on valid cities (non-blocking)
@@ -102,15 +108,15 @@ export const validateCityHandler = async (req: Request, res: Response, next: Nex
             return sendSuccess(res, { status: "ENABLED", city: cityKey }, HttpStatus.OK);
         }
 
-        // Increment aggregate counter for the city enquiry dashboard
+        // Respond immediately — enquiry writes are non-blocking
         const enquiryRef = db.collection("city_enquiries").doc(cityKey);
-        await enquiryRef.set(
+        enquiryRef.set(
             {
                 count: adminRef.firestore.FieldValue.increment(1),
                 last_enquired_at: adminRef.firestore.FieldValue.serverTimestamp(),
             },
             { merge: true }
-        );
+        ).catch((err) => console.error("[validateCity] enquiry count update failed:", err));
 
         // Log user + IP details for security monitoring (non-blocking — never delays the response)
         logCityAccess(req, cityKey, "COMING_SOON").catch((err) =>

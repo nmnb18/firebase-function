@@ -9,71 +9,71 @@ const cache = createCache();
 
 export const getTransactionsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-                // Authenticate user
-                const currentUser = await authenticateUser(req.headers.authorization);
+        // Authenticate user
+        const currentUser = await authenticateUser(req.headers.authorization);
 
-                // Get query parameters
-                const limit = parseInt(req.query.limit as string) || 10;
-                const type = req.query.type as string; // Optional filter by type
-                const sellerId = req.query.seller_id as string; // Optional filter by seller
+        // Get query parameters
+        const limit = parseInt(req.query.limit as string) || 10;
+        const type = req.query.type as string; // Optional filter by type
+        const sellerId = req.query.seller_id as string; // Optional filter by seller
 
-                // Check cache (90s TTL)
-                // const cacheKey = `transactions:${currentUser.uid}_${limit}_${type || 'all'}_${sellerId || 'all'}`;
-                // const cached = cache.get<any>(cacheKey);
-                // if (cached) {
-                //     return res.status(200).json(cached);
-                // }
+        // Check cache (90s TTL)
+        // const cacheKey = `transactions:${currentUser.uid}_${limit}_${type || 'all'}_${sellerId || 'all'}`;
+        // const cached = cache.get<any>(cacheKey);
+        // if (cached) {
+        //     return res.status(200).json(cached);
+        // }
 
-                // Build query
-                let query = db.collection("transactions")
-                    .where("user_id", "==", currentUser.uid)
-                    .orderBy("timestamp", "desc")
-                    .limit(limit);
+        // Build query
+        let query = db.collection("transactions")
+            .where("user_id", "==", currentUser.uid)
+            .orderBy("timestamp", "desc")
+            .limit(limit);
 
-                // Apply filters if provided
-                if (type) {
-                    query = query.where("transaction_type", "==", type);
+        // Apply filters if provided
+        if (type) {
+            query = query.where("transaction_type", "==", type);
+        }
+
+        if (sellerId) {
+            query = query.where("seller_id", "==", sellerId);
+        }
+
+        const transactionsSnapshot = await query.get();
+
+        if (transactionsSnapshot.empty) {
+            const responseData: any[] = [];
+            //cache.set(cacheKey, responseData, 90000);
+            return sendSuccess(res, responseData, HttpStatus.OK);
+        }
+
+        const transactions = transactionsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            const pointsValue = Number(data.points_earned ?? data.points ?? 0);
+            return {
+                id: doc.id,
+                seller_id: data.seller_id,
+                seller_name: data.seller_name || "Unknown Store",
+                points: pointsValue,
+                type: data.transaction_type || 'earn',
+                description: data.description || '',
+                amount: data.amount || 0,
+                created_at: data.timestamp?.toDate().toISOString() || new Date().toISOString(),
+                qr_type: data.qr_type,
+                // Add additional metadata
+                metadata: {
+                    has_amount: !!data.amount,
+                    is_reward: data.transaction_type === 'earn',
+                    is_redemption: data.transaction_type === 'redeem',
+                    is_payment: data.transaction_type === 'payment' || data.qr_type === 'payment'
                 }
+            };
+        });
 
-                if (sellerId) {
-                    query = query.where("seller_id", "==", sellerId);
-                }
+        // Cache result (90s TTL)
+        //cache.set(cacheKey, transactions, 90000);
 
-                const transactionsSnapshot = await query.get();
-
-                if (transactionsSnapshot.empty) {
-                    const responseData: any[] = [];
-                    //cache.set(cacheKey, responseData, 90000);
-                    return sendSuccess(res, responseData, HttpStatus.OK);
-                }
-
-                const transactions = transactionsSnapshot.docs.map(doc => {
-                    const data = doc.data();
-                    const pointsValue = Number(data.points_earned ?? data.points ?? 0);
-                    return {
-                        id: doc.id,
-                        seller_id: data.seller_id,
-                        seller_name: data.seller_name || "Unknown Store",
-                        points: pointsValue,
-                        type: data.transaction_type || 'earn',
-                        description: data.description || '',
-                        amount: data.amount || 0,
-                        created_at: data.timestamp?.toDate().toISOString() || new Date().toISOString(),
-                        qr_type: data.qr_type,
-                        // Add additional metadata
-                        metadata: {
-                            has_amount: !!data.amount,
-                            is_reward: data.transaction_type === 'earn',
-                            is_redemption: data.transaction_type === 'redeem',
-                            is_payment: data.transaction_type === 'payment' || data.qr_type === 'payment'
-                        }
-                    };
-                });
-
-                // Cache result (90s TTL)
-                //cache.set(cacheKey, transactions, 90000);
-
-                return sendSuccess(res, transactions, HttpStatus.OK);
+        return sendSuccess(res, transactions, HttpStatus.OK);
 
     } catch (err) {
         next(err);

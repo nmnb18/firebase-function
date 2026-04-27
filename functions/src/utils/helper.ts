@@ -59,14 +59,14 @@ const sendVerificationEmail = async (email: string, name: string, verificationTo
                 },
             ],
             from: {
-                email: 'support@grabbitt.in',
-                name: "Grabbitt Support",
+                email: 'support@yoperks.com',
+                name: "yoPerks Support",
             },
             template_id: 'verify_mail',
             variables: {
                 name,
-                verification_link: `https://grabbitt.in/verify-email?token=${verificationToken}`,
-                year: 2025
+                verification_link: `https://yoperks.com/verify-email?token=${verificationToken}`,
+                year: 2026
             },
         },
         {

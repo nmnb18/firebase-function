@@ -9,7 +9,16 @@
     "serve": "npm run build && firebase emulators:start --only functions,auth,firestore,ui,storage",
     "shell": "firebase functions:shell",
     "start": "npm run serve",
-    "deploy": "npm run build && firebase deploy --only functions"
+    "deploy": "npm run build && firebase deploy --only functions",
+    "test": "jest --forceExit",
+    "test:smoke": "jest --testPathPattern=tests/smoke --forceExit",
+    "test:sanity": "jest --testPathPattern=tests/sanity --forceExit",
+    "test:regression": "jest --testPathPattern=tests/regression --forceExit --runInBand",
+    "test:unit": "jest --testPathPattern=calculate-reward-points.unit --forceExit",
+    "test:all": "jest --forceExit",
+    "test:coverage": "jest --coverage",
+    "test:report": "allure generate allure-results -o allure-report --clean",
+    "test:report:open": "allure open allure-report"
   },
   "engines": {
     "node": "20"
@@ -23,6 +32,7 @@
     "dotenv": "^17.3.1",
     "expo-server-sdk": "^4.0.0",
     "express": "^5.2.1",
+    "express-rate-limit": "^7.5.0",
     "firebase-admin": "^12.0.0",
     "firebase-functions": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
@@ -31,18 +41,25 @@
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.6",
     "uuid": "^13.0.0",
-    "zod": "^3.23.8",
-    "express-rate-limit": "^7.5.0"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/jest": "^29.5.0",
     "@types/multer": "^2.0.0",
     "@types/qrcode": "^1.5.6",
+    "@types/supertest": "^6.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "allure-commandline": "^2.30.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.29.0",
+    "jest": "^29.7.0",
+    "jest-allure2-reporter": "^2.3.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
   },
   "private": true

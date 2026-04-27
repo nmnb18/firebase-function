@@ -4,6 +4,12 @@ if (!admin.apps.length) {
   // In Cloud Functions, FIREBASE_CONFIG is auto-set; locally use env vars
   if (process.env.FIREBASE_CONFIG) {
     admin.initializeApp();
+  } else if (process.env.FIRESTORE_EMULATOR_HOST) {
+    // Running against local Firebase emulator (tests / local dev) — no real credentials needed
+    admin.initializeApp({
+      projectId: process.env.FIREBASE_PROJECT_ID ?? "demo-grabbitt-test",
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? "demo-grabbitt-test.appspot.com",
+    });
   } else {
     admin.initializeApp({
       storageBucket: process.env.FIREBASE_STORAGE_BUCKET,

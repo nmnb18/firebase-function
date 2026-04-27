@@ -27,7 +27,6 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
                     .limit(1)
                     .get(),
                 db.collection("transactions")
-                    .where("transaction_type", "==", "earn")
                     .where("timestamp", ">=", last30)
                     .get(),
                 db.collection("redemptions")
@@ -44,7 +43,17 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
             const profileDoc = profileQuery.docs[0];
             const sellerId = profileDoc.id;
             const sellerData = profileDoc.data();
-            const tier: "free" | "pro" | "premium" = sellerData?.subscription?.tier || "free";
+            const rawTier = String(
+                sellerData?.subscription?.tier ||
+                sellerData?.subscription?.plan ||
+                "free"
+            ).toLowerCase();
+            const tier: "free" | "pro" | "premium" =
+                rawTier === "premium"
+                    ? "premium"
+                    : rawTier === "pro"
+                        ? "pro"
+                        : "free";
 
             // Block free tier
             if (tier === "free") {
@@ -52,7 +61,10 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
             }
 
             // Filter all documents by seller_id
-            const txDocs = txSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
+            const txDocs = txSnapshot.docs.filter(doc => {
+                const d = doc.data();
+                return d.seller_id === sellerId && d.transaction_type === "earn";
+            });
             const redDocs = redSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
             const pointsDocs = pointsSnapshot.docs.filter(doc => doc.data().seller_id === sellerId);
 
@@ -71,6 +83,15 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
             const userSetByDay30 = new Map<string, Set<string>>();
 
             const toDayKey = (d: Date) => d.toISOString().split("T")[0];
+            const toSafeDate = (value: any): Date | null => {
+                if (!value) return null;
+                if (value?.toDate && typeof value.toDate === "function") {
+                    const dt = value.toDate();
+                    return Number.isNaN(dt?.getTime?.()) ? null : dt;
+                }
+                const dt = new Date(value);
+                return Number.isNaN(dt.getTime()) ? null : dt;
+            };
 
             // Initialize last 30 days buckets
             for (let i = 0; i < 30; i++) {
@@ -114,7 +135,8 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
 
             txDocs.forEach((doc) => {
                 const d = doc.data();
-                const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date(d.timestamp);
+                const ts = toSafeDate(d.timestamp);
+                if (!ts) return;
                 const key = toDayKey(ts);
                 const userId = d.user_id as string;
                 const customerName = d.customer_name;
@@ -166,7 +188,8 @@ export const sellerAdvancedAnalyticsHandler = async (req: Request, res: Response
             // Process redemptions
             redDocs.forEach((doc) => {
                 const d = doc.data();
-                const ts = d.created_at?.toDate ? d.created_at.toDate() : new Date(d.created_at);
+                const ts = toSafeDate(d.created_at);
+                if (!ts) return;
                 const key = toDayKey(ts);
                 const userId = d.user_id as string;
                 const customerName = d.user_name || "Unknown";

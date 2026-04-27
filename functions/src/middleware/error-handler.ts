@@ -87,6 +87,19 @@ function asAppError(e: unknown): AppError | null {
 }
 
 /**
+ * Body parser invalid JSON error from express.json/body-parser.
+ * These are client input errors and must never be treated as 500.
+ */
+function isJsonParseError(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const err = e as Record<string, unknown>;
+  return (
+    err["type"] === "entity.parse.failed" &&
+    err["status"] === HttpStatus.BAD_REQUEST
+  );
+}
+
+/**
  * Best-effort UID extraction for logging purposes ONLY.
  * Decodes the JWT payload without signature verification — safe because
  * this value is only written to error_logs, never used for auth decisions.
@@ -116,6 +129,17 @@ export function errorHandlerMiddleware(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _next: NextFunction,
 ): void {
+  if (isJsonParseError(error)) {
+    res.locals.errorCode = ErrorCodes.INVALID_INPUT;
+    sendError(
+      res,
+      ErrorCodes.INVALID_INPUT,
+      "Invalid JSON payload",
+      HttpStatus.BAD_REQUEST,
+    );
+    return;
+  }
+
   const err    = toError(error);
   // Use duck-typing as primary check — instanceof can fail across
   // module-load boundaries in V8/Cloud Functions cold starts.
@@ -156,6 +180,10 @@ export function errorHandlerMiddleware(
 
   // Never expose internal error details to the client
   const clientMessage = isOp ? err.message : "An internal server error occurred";
+
+  // Expose the error code via res.locals so the correlation middleware's
+  // finish handler can include it in the structured response log entry.
+  res.locals.errorCode = errorCode;
 
   sendError(res, errorCode, clientMessage, statusCode);
 }

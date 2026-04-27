@@ -36,11 +36,33 @@ export function correlationMiddleware(req: Request, res: Response, next: NextFun
 
   const start = Date.now();
 
-  logger.info("→ request", { method: req.method, path: req.path }, req);
+  logger.info("→ request", {
+    method: req.method,
+    path: req.path,
+    userAgent: req.headers["user-agent"] ?? "unknown",
+    remoteIp: (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim()
+      ?? req.socket?.remoteAddress
+      ?? "unknown",
+  }, req);
 
   res.on("finish", () => {
     const ms = Date.now() - start;
-    const meta = { method: req.method, path: req.path, statusCode: res.statusCode, ms };
+    const uid = (req as any).user?.uid as string | undefined;
+    const errorCode = res.locals.errorCode as string | undefined;
+
+    const meta: Record<string, unknown> = {
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      ms,
+      ...(uid ? { userId: uid } : {}),
+      ...(errorCode ? { errorCode } : {}),
+    };
+
+    if (ms > 3000) {
+      logger.warn(`⚠ slow response ${ms}ms on ${req.method} ${req.path}`, meta, req);
+    }
+
     if (res.statusCode >= 400) {
       logger.warn("← response", meta, req);
     } else {

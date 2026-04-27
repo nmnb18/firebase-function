@@ -16,6 +16,8 @@ export const clientLogEntrySchema = z.object({
     componentStack: z.string().max(5000).optional(),
     endpoint: z.string().max(500).optional(),
     httpStatus: z.number().int().min(100).max(599).optional(),
+    errorCode: z.string().max(100).optional(),
+    durationMs: z.number().int().min(0).optional(),
     appVersion: z.string().max(30),
     platform: z.enum(["ios", "android", "unknown"]),
     appId: z.enum(["user", "seller"]),

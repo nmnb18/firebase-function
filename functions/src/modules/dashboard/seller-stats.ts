@@ -127,7 +127,7 @@ export const sellerStatsHandler = async (req: Request, res: Response, next: Next
                 const userSet = new Set<string>();
                 txSnap.forEach(doc => {
                     const d = doc.data();
-                    pointsSum += Number(d.points || 0);
+                    pointsSum += Number(d.points_earned ?? d.points ?? 0);
                     if (d.user_id) userSet.add(d.user_id);
                 });
                 results.total_points_issued = pointsSum;
@@ -181,7 +181,8 @@ export const sellerStatsHandler = async (req: Request, res: Response, next: Next
                 // Today stats
                 let todayPoints = 0;
                 todayScansSnap.forEach(doc => {
-                    todayPoints += Number(doc.data().points || 0);
+                    const data = doc.data();
+                    todayPoints += Number(data.points_earned ?? data.points ?? 0);
                 });
                 let todayRedeemedPoints = 0;
                 todayRedemptionsSnap.forEach(doc => {

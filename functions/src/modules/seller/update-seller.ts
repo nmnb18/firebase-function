@@ -26,7 +26,7 @@ function autoGenerateOfferIds(offers: any[], sellerId: string): any[] {
             ...offer,
             status: 'active',
             reward_id: generateOfferId(sellerId, index + 1),
-            created_at: adminRef.firestore.FieldValue.serverTimestamp(),
+            created_at: adminRef.firestore.Timestamp.now(),
         };
     });
 }

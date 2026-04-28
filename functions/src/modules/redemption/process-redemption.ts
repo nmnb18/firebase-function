@@ -26,6 +26,7 @@ export const processRedemptionHandler = async (req: Request, res: Response, next
                 }
 
                 const redemption = redemptionDoc.data() as Redemption;
+                const offerNameForMessage = redemption.offer_name || "reward";
 
                 // Check if seller matches
                 if (redemption.seller_id !== sellerUser.uid) {
@@ -144,7 +145,7 @@ export const processRedemptionHandler = async (req: Request, res: Response, next
                     saveNotification(
                         redemption.user_id,
                         "⭐ Points Redeemed!",
-                        `You redeeems ${redemption.points} points at ${redemption.seller_shop_name}`,
+                        `You redeemed ${redemption.points} points at ${redemption.seller_shop_name}`,
                         {
                             type: NotificationType.REDEMPTION,
                             screen: "/(drawer)/redeem/redeem-home",
@@ -158,7 +159,7 @@ export const processRedemptionHandler = async (req: Request, res: Response, next
                     saveNotification(
                         redemption.seller_id,
                         "⭐ Points Redeemed!",
-                        `${redemption.user_name} has redeeemed ${redemption.points} for ${redemption.offer_name}`,
+                        `${redemption.user_name} has redeemed ${redemption.points} points for ${offerNameForMessage}`,
                         {
                             type: NotificationType.NEW_ORDER,
                             screen: "/(drawer)/redemptions",
@@ -178,7 +179,7 @@ export const processRedemptionHandler = async (req: Request, res: Response, next
                     pushService.sendToUser(
                         userTokens,
                         "⭐ Points Redeemed!",
-                        `You redeeemed ${redemption.points} points at ${redemption.seller_shop_name}`,
+                        `You redeemed ${redemption.points} points at ${redemption.seller_shop_name}`,
                         {
                             type: NotificationType.REDEMPTION,
                             screen: "/(drawer)/redeem/redeem-home",
@@ -194,7 +195,7 @@ export const processRedemptionHandler = async (req: Request, res: Response, next
                     pushService.sendToUser(
                         sellerTokens,
                         "⭐ Points Redeemed!",
-                        `${redemption.user_name} has redeeemed ${redemption.points} for ${redemption.offer_name}`,
+                        `${redemption.user_name} has redeemed ${redemption.points} points for ${offerNameForMessage}`,
                         {
                             type: NotificationType.NEW_ORDER,
                             screen: "/(drawer)/redemptions",

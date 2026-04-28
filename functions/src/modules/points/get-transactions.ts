@@ -49,11 +49,12 @@ export const getTransactionsHandler = async (req: Request, res: Response, next: 
 
         const transactions = transactionsSnapshot.docs.map(doc => {
             const data = doc.data();
+            const pointsValue = Number(data.points_earned ?? data.points ?? 0);
             return {
                 id: doc.id,
                 seller_id: data.seller_id,
                 seller_name: data.seller_name || "Unknown Store",
-                points: data.points_earned || data.points || 0,
+                points: pointsValue,
                 type: data.transaction_type || 'earn',
                 description: data.description || '',
                 amount: data.amount || 0,
